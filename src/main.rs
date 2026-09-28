@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fs;
+use std::path::Path;
 use std::process::Command;
 use std::{env, path::PathBuf};
 
@@ -55,24 +56,36 @@ fn find_all_executables(executable: &str) -> Vec<PathBuf> {
     all_paths
 }
 
+fn get_version(path: &Path) -> Result<String, &str> {
+    let output = Command::new(path).arg("--version").output();
+
+    match output {
+        Ok(out) => {
+            if out.status.success() {
+                Ok(String::from(String::from_utf8_lossy(&out.stdout).trim()))
+            } else {
+                Err("exited with non-zero code")
+            }
+        }
+        // i can't figure out how to return the error to the caller so i will print, figure this out later
+        Err(e) => {
+            println!("process failed with error {e}");
+            Err("process failed")
+        }
+    }
+}
+
 fn main() {
     let executables = ["python", "rustc", "cargo", "node"];
 
     for exec in executables {
         match find_executable(exec) {
             Some(exec_path) => {
-                let version = Command::new(&exec_path)
-                    .arg("--version")
-                    .output()
-                    .expect("failed to execute process");
-
-                println!("status: {}", version.status);
-                println!(
-                    "stdout: {exec} -> {} -> {}",
-                    exec_path.display(),
-                    String::from_utf8_lossy(&version.stdout)
-                );
-                println!("stderr: {}", String::from_utf8_lossy(&version.stderr));
+                let version = get_version(&exec_path);
+                match version {
+                    Ok(v) => println!("{exec} -> {} -> {}", exec_path.display(), v),
+                    Err(e) => println!("process failed with error {e}"),
+                }
             }
             None => println!("{exec} not found"),
         }
