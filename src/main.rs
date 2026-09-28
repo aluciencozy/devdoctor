@@ -65,11 +65,14 @@ fn main() {
                     .arg("--version")
                     .output()
                     .expect("failed to execute process");
+
+                println!("status: {}", version.status);
                 println!(
-                    "{exec} -> {} -> {}",
+                    "stdout: {exec} -> {} -> {}",
                     exec_path.display(),
                     String::from_utf8_lossy(&version.stdout)
                 );
+                println!("stderr: {}", String::from_utf8_lossy(&version.stderr));
             }
             None => println!("{exec} not found"),
         }
