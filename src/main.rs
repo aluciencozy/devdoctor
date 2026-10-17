@@ -57,22 +57,20 @@ fn find_all_executables(executable: &str) -> Vec<PathBuf> {
 }
 
 fn get_version(path: &Path) -> Result<String, String> {
-    let output = Command::new(path).arg("--version").output();
+    let out = Command::new(path)
+        .arg("--version")
+        .output()
+        .map_err(|e| e.to_string())?;
 
-    match output {
-        Ok(out) => {
-            if out.status.success() {
-                Ok(String::from(String::from_utf8_lossy(&out.stdout).trim()))
-            } else {
-                let e = format!(
-                    "Process failed\n{}\nstderr:{}",
-                    out.status,
-                    String::from_utf8_lossy(&out.stderr)
-                );
-                Err(e)
-            }
-        }
-        Err(e) => Err(e.to_string()),
+    if out.status.success() {
+        Ok(String::from(String::from_utf8_lossy(&out.stdout).trim()))
+    } else {
+        let e = format!(
+            "Process failed\n{}\nstderr:{}",
+            out.status,
+            String::from_utf8_lossy(&out.stderr)
+        );
+        Err(e)
     }
 }
 
