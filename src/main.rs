@@ -90,7 +90,6 @@ fn main() {
                 let version = get_version(&exec_path);
                 match version {
                     Ok(v) => {
-                        println!("{exec} -> {} -> {}", exec_path.display(), v);
                         runtimes.push(Runtime {
                             name: exec.to_string(),
                             exec_path,
@@ -102,5 +101,14 @@ fn main() {
             }
             None => println!("{exec} not found"),
         }
+    }
+
+    for runtime in &runtimes {
+        println!(
+            "{} -> {} -> {}",
+            runtime.name,
+            runtime.exec_path.display(),
+            runtime.version
+        );
     }
 }
