@@ -56,7 +56,7 @@ fn find_all_executables(executable: &str) -> Vec<PathBuf> {
     all_paths
 }
 
-fn get_version(path: &Path) -> Result<String, &str> {
+fn get_version(path: &Path) -> Result<String, String> {
     let output = Command::new(path).arg("--version").output();
 
     match output {
@@ -64,14 +64,15 @@ fn get_version(path: &Path) -> Result<String, &str> {
             if out.status.success() {
                 Ok(String::from(String::from_utf8_lossy(&out.stdout).trim()))
             } else {
-                Err("exited with non-zero code")
+                let e = format!(
+                    "Proccess failed\nExit status: {}\nstderr:{}",
+                    out.status,
+                    String::from_utf8_lossy(&out.stderr)
+                );
+                Err(e)
             }
         }
-        // i can't figure out how to return the error to the caller so i will print, figure this out later
-        Err(e) => {
-            println!("process failed with error {e}");
-            Err("process failed")
-        }
+        Err(e) => Err(e.to_string()),
     }
 }
 
