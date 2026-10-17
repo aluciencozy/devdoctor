@@ -4,6 +4,12 @@ use std::path::Path;
 use std::process::Command;
 use std::{env, path::PathBuf};
 
+struct Runtime {
+    name: String,
+    exec_path: PathBuf,
+    version: String,
+}
+
 fn find_executable(executable: &str) -> Option<PathBuf> {
     let path_env = env::var_os("PATH").expect("path environment variable not found");
 
@@ -76,13 +82,21 @@ fn get_version(path: &Path) -> Result<String, String> {
 
 fn main() {
     let executables = ["python", "rustc", "cargo", "node"];
+    let mut runtimes: Vec<Runtime> = Vec::new();
 
     for exec in executables {
         match find_executable(exec) {
             Some(exec_path) => {
                 let version = get_version(&exec_path);
                 match version {
-                    Ok(v) => println!("{exec} -> {} -> {}", exec_path.display(), v),
+                    Ok(v) => {
+                        println!("{exec} -> {} -> {}", exec_path.display(), v);
+                        runtimes.push(Runtime {
+                            name: exec.to_string(),
+                            exec_path,
+                            version: v,
+                        });
+                    }
                     Err(e) => println!("process failed with error {e}"),
                 }
             }
