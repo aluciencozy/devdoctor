@@ -65,7 +65,7 @@ fn get_version(path: &Path) -> Result<String, String> {
                 Ok(String::from(String::from_utf8_lossy(&out.stdout).trim()))
             } else {
                 let e = format!(
-                    "Process failed\nExit status: {}\nstderr:{}",
+                    "Process failed\n{}\nstderr:{}",
                     out.status,
                     String::from_utf8_lossy(&out.stderr)
                 );
