@@ -80,7 +80,7 @@ fn get_version(path: &Path) -> Result<String, String> {
     }
 }
 
-fn main() {
+fn get_runtimes() -> Vec<Runtime> {
     let executables = ["python", "rustc", "cargo", "node"];
     let mut runtimes: Vec<Runtime> = Vec::new();
 
@@ -102,6 +102,12 @@ fn main() {
             None => println!("{exec} not found"),
         }
     }
+
+    runtimes
+}
+
+fn main() {
+    let runtimes = get_runtimes();
 
     for runtime in &runtimes {
         println!(
