@@ -7,7 +7,7 @@ use std::{env, path::PathBuf};
 struct Runtime {
     name: String,
     exec_path: PathBuf,
-    version: String,
+    version: Option<String>,
 }
 
 fn find_executable(executable: &str) -> Option<PathBuf> {
@@ -87,17 +87,13 @@ fn get_runtimes() -> Vec<Runtime> {
     for exec in executables {
         match find_executable(exec) {
             Some(exec_path) => {
-                let version = get_version(&exec_path);
-                match version {
-                    Ok(v) => {
-                        runtimes.push(Runtime {
-                            name: exec.to_string(),
-                            exec_path,
-                            version: v,
-                        });
-                    }
-                    Err(e) => println!("process failed with error {e}"),
-                }
+                let version = get_version(&exec_path).ok();
+
+                runtimes.push(Runtime {
+                    name: exec.to_string(),
+                    exec_path,
+                    version,
+                })
             }
             None => println!("{exec} not found"),
         }
@@ -110,11 +106,14 @@ fn main() {
     let runtimes = get_runtimes();
 
     for runtime in &runtimes {
-        println!(
-            "{} -> {} -> {}",
-            runtime.name,
-            runtime.exec_path.display(),
-            runtime.version
-        );
+        let print_str = format!("{} -> {} ->", runtime.name, runtime.exec_path.display());
+        match &runtime.version {
+            Some(v) => {
+                println!("{} {}", print_str, v);
+            }
+            None => {
+                println!("{} version check failed", print_str);
+            }
+        }
     }
 }
