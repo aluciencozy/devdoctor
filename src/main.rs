@@ -4,9 +4,10 @@ use std::path::Path;
 use std::process::Command;
 use std::{env, path::PathBuf};
 
+#[derive(Debug)]
 struct Runtime {
     name: String,
-    exec_path: PathBuf,
+    exec_path: Option<PathBuf>,
     version: Option<String>,
 }
 
@@ -85,18 +86,18 @@ fn get_runtimes() -> Vec<Runtime> {
     let mut runtimes: Vec<Runtime> = Vec::new();
 
     for exec in executables {
-        match find_executable(exec) {
-            Some(exec_path) => {
-                let version = get_version(&exec_path).ok();
+        let mut version = None;
+        let exec_path = find_executable(exec);
 
-                runtimes.push(Runtime {
-                    name: exec.to_string(),
-                    exec_path,
-                    version,
-                })
-            }
-            None => println!("{exec} not found"),
+        if let Some(e) = &exec_path {
+            version = get_version(e).ok();
         }
+
+        runtimes.push(Runtime {
+            name: exec.to_string(),
+            exec_path,
+            version,
+        })
     }
 
     runtimes
@@ -106,14 +107,6 @@ fn main() {
     let runtimes = get_runtimes();
 
     for runtime in &runtimes {
-        let print_str = format!("{} -> {} ->", runtime.name, runtime.exec_path.display());
-        match &runtime.version {
-            Some(v) => {
-                println!("{} {}", print_str, v);
-            }
-            None => {
-                println!("{} version check failed", print_str);
-            }
-        }
+        println!("{:?}", runtime);
     }
 }
