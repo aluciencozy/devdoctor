@@ -6,6 +6,6 @@ fn main() {
     let runtimes = get_runtimes();
 
     for runtime in &runtimes {
-        println!("{:?}", runtime);
+        println!("{runtime:?}");
     }
 }
