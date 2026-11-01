@@ -55,9 +55,8 @@ fn find_all_executables(executable: &str) -> Vec<PathBuf> {
                     "error canonicalizing path: {}\nskipping with error: {e}",
                     path.display()
                 );
-                continue;
             }
-        };
+        }
     }
 
     all_paths
@@ -89,15 +88,15 @@ pub fn get_runtimes() -> Vec<Runtime> {
         let mut version = None;
         let exec_path = find_executable(exec);
 
-        if let Some(e) = &exec_path {
-            version = get_version(e).ok();
+        if let Some(path) = &exec_path {
+            version = get_version(path).ok();
         }
 
         runtimes.push(Runtime {
             name: exec.to_string(),
             exec_path,
             version,
-        })
+        });
     }
 
     runtimes
