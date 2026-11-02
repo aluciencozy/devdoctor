@@ -26,7 +26,7 @@ fn main() {
         println!("{runtime:?}");
     }
 
-    let processes = get_processes(&sys);
+    let processes = get_processes(&mut sys);
 
     for process in &processes {
         println!("{process:?}");

@@ -1,4 +1,4 @@
-use sysinfo::{Pid, System};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 use std::{ffi::OsString, path::PathBuf};
 
@@ -9,7 +9,13 @@ pub struct Process {
     cwd: Option<PathBuf>,
 }
 
-pub fn get_processes(sys: &System) -> Vec<Process> {
+pub fn get_processes(sys: &mut System) -> Vec<Process> {
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::everything(),
+    );
+
     sys.processes()
         .values()
         .map(|p| Process {
