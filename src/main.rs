@@ -12,8 +12,6 @@ fn main() {
         return;
     };
 
-    sys.refresh_all();
-
     println!("total memory: {} bytes", sys.total_memory());
     println!("used memory : {} bytes", sys.used_memory());
     println!("total swap  : {} bytes", sys.total_swap());
