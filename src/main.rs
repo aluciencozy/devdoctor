@@ -25,7 +25,9 @@ fn main() {
     }
 
     let ports = get_ports();
-    for port in &ports {
-        println!("{port:?}");
+    if let Ok(ports) = ports {
+        for port in &ports {
+            println!("{port:?}");
+        }
     }
 }

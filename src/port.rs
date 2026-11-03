@@ -10,20 +10,25 @@ pub struct Port {
     protocol: Protocol,
 }
 
-pub fn get_ports() -> Vec<Port> {
+pub fn get_ports() -> Result<Vec<Port>, String> {
     let mut ports = Vec::new();
 
-    if let Ok(listeners) = listeners::get_all() {
-        for l in listeners {
-            if let SocketState::Listen = l.state {
-                ports.push(Port {
-                    pid: Pid::from_u32(l.process.pid),
-                    socket: l.socket,
-                    protocol: l.protocol,
-                })
+    match listeners::get_all() {
+        Ok(listeners) => {
+            for l in listeners {
+                if let SocketState::Listen = l.state
+                    && l.protocol == Protocol::TCP
+                {
+                    ports.push(Port {
+                        pid: Pid::from_u32(l.process.pid),
+                        socket: l.socket,
+                        protocol: l.protocol,
+                    })
+                }
             }
-        }
-    }
 
-    ports
+            Ok(ports)
+        }
+        Err(e) => Err(e.to_string()),
+    }
 }
