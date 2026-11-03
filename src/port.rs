@@ -4,13 +4,13 @@ use sysinfo::Pid;
 use listeners::{Protocol, SocketState};
 
 #[derive(Debug)]
-pub struct Port {
+pub struct ListeningSocket {
     pub(crate) pid: Pid,
     socket: SocketAddr,
     protocol: Protocol,
 }
 
-pub fn get_ports() -> Result<Vec<Port>, String> {
+pub fn get_ports() -> Result<Vec<ListeningSocket>, String> {
     let mut ports = Vec::new();
 
     match listeners::get_all() {
@@ -19,7 +19,7 @@ pub fn get_ports() -> Result<Vec<Port>, String> {
                 if let SocketState::Listen = l.state
                     && l.protocol == Protocol::TCP
                 {
-                    ports.push(Port {
+                    ports.push(ListeningSocket {
                         pid: Pid::from_u32(l.process.pid),
                         socket: l.socket,
                         protocol: l.protocol,

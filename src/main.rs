@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use sysinfo::{Pid, System};
 
-use port::{Port, get_ports};
+use port::{ListeningSocket, get_ports};
 use process::get_processes;
 use runtime::get_runtimes;
 
@@ -17,36 +17,16 @@ fn main() {
     };
 
     let runtimes = get_runtimes();
-    for runtime in &runtimes {
-        println!("{runtime:?}");
-    }
 
-    let processes = get_processes(&mut sys);
-    for process in &processes {
-        println!("{process:?}");
-    }
+    let processes_by_pid: HashMap<_, _> = get_processes(&mut sys)
+        .into_iter()
+        .map(|proc| (proc.pid, proc))
+        .collect();
 
-    let processes: HashMap<_, _> = processes.into_iter().map(|proc| (proc.pid, proc)).collect();
+    let listeners = get_ports().unwrap_or_default();
+    let mut sockets_by_pid: HashMap<Pid, Vec<ListeningSocket>> = HashMap::new();
 
-    let ports = get_ports();
-    match ports {
-        Ok(ports) => {
-            for port in &ports {
-                println!("{port:?}");
-            }
-
-            // match ports to pids, for now this is just handled in main
-            let mut pid_to_ports: HashMap<Pid, Vec<Port>> = HashMap::new();
-            for port in ports {
-                if pid_to_ports.contains_key(&port.pid) {
-                    if let Some(v) = pid_to_ports.get_mut(&port.pid) {
-                        v.push(port);
-                    }
-                } else {
-                    pid_to_ports.insert(port.pid, vec![port]);
-                }
-            }
-        }
-        Err(e) => println!("{e}"),
+    for socket in listeners {
+        sockets_by_pid.entry(socket.pid).or_default().push(socket);
     }
 }
