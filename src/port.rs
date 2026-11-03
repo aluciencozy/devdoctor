@@ -5,7 +5,7 @@ use listeners::{Protocol, SocketState};
 
 #[derive(Debug)]
 pub struct Port {
-    pid: Pid,
+    pub(crate) pid: Pid,
     socket: SocketAddr,
     protocol: Protocol,
 }

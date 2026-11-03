@@ -4,7 +4,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 #[derive(Debug)]
 pub struct Process {
-    pid: Pid,
+    pub(crate) pid: Pid,
     command: Vec<OsString>,
     cwd: Option<PathBuf>,
 }

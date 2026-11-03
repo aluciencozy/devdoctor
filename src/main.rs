@@ -2,9 +2,11 @@ mod port;
 mod process;
 mod runtime;
 
-use sysinfo::System;
+use std::collections::HashMap;
 
-use port::get_ports;
+use sysinfo::{Pid, System};
+
+use port::{Port, get_ports};
 use process::get_processes;
 use runtime::get_runtimes;
 
@@ -24,10 +26,27 @@ fn main() {
         println!("{process:?}");
     }
 
+    let processes: HashMap<_, _> = processes.into_iter().map(|proc| (proc.pid, proc)).collect();
+
     let ports = get_ports();
-    if let Ok(ports) = ports {
-        for port in &ports {
-            println!("{port:?}");
+    match ports {
+        Ok(ports) => {
+            for port in &ports {
+                println!("{port:?}");
+            }
+
+            // match ports to pids, for now this is just handled in main
+            let mut pid_to_ports: HashMap<Pid, Vec<Port>> = HashMap::new();
+            for port in ports {
+                if pid_to_ports.contains_key(&port.pid) {
+                    if let Some(v) = pid_to_ports.get_mut(&port.pid) {
+                        v.push(port);
+                    }
+                } else {
+                    pid_to_ports.insert(port.pid, vec![port]);
+                }
+            }
         }
+        Err(e) => println!("{e}"),
     }
 }
