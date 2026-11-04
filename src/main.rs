@@ -1,14 +1,10 @@
-mod port;
+mod listener;
 mod process;
 mod runtime;
+mod snapshot;
 
-use std::collections::HashMap;
-
-use sysinfo::{Pid, System};
-
-use port::{ListeningSocket, get_ports};
-use process::get_processes;
-use runtime::get_runtimes;
+use snapshot::SystemSnapshot;
+use sysinfo::System;
 
 fn main() {
     let Ok(mut sys) = System::new() else {
@@ -16,17 +12,11 @@ fn main() {
         return;
     };
 
-    let runtimes = get_runtimes();
+    let mut system_snapshot = SystemSnapshot::new(&mut sys);
 
-    let processes_by_pid: HashMap<_, _> = get_processes(&mut sys)
-        .into_iter()
-        .map(|proc| (proc.pid, proc))
-        .collect();
+    println!("{system_snapshot:?}");
 
-    let listeners = get_ports().unwrap_or_default();
-    let mut sockets_by_pid: HashMap<Pid, Vec<ListeningSocket>> = HashMap::new();
+    system_snapshot.refresh(&mut sys);
 
-    for socket in listeners {
-        sockets_by_pid.entry(socket.pid).or_default().push(socket);
-    }
+    println!("{system_snapshot:?}");
 }

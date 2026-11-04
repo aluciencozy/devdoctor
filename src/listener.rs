@@ -10,7 +10,7 @@ pub struct ListeningSocket {
     protocol: Protocol,
 }
 
-pub fn get_ports() -> Result<Vec<ListeningSocket>, String> {
+pub fn get_listening_sockets() -> Result<Vec<ListeningSocket>, String> {
     let mut ports = Vec::new();
 
     match listeners::get_all() {
