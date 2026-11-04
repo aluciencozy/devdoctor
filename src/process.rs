@@ -1,6 +1,6 @@
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
-
 use std::{ffi::OsString, path::PathBuf};
+
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 #[derive(Debug)]
 pub struct ProcessInfo {
