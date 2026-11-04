@@ -50,5 +50,7 @@ impl SystemSnapshot {
         }
 
         self.sockets_by_pid = sockets_by_pid;
+
+        self.runtimes = get_runtimes();
     }
 }
