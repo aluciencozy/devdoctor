@@ -18,17 +18,37 @@ mod process;
 mod runtime;
 mod snapshot;
 
-fn main() {
+#[derive(Default, Debug)]
+struct App {
+    exit: bool,
+}
+
+impl App {
+    /// runs the application's main loop until the user quits
+    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        while !self.exit {
+            terminal.draw(|frame| self.draw(frame))?;
+            self.handle_events()?;
+        }
+        Ok(())
+    }
+
+    fn draw(&self, frame: &mut Frame) {
+        todo!()
+    }
+
+    fn handle_events(&mut self) -> io::Result<()> {
+        todo!()
+    }
+}
+
+fn main() -> io::Result<()> {
     let Ok(mut sys) = System::new() else {
-        println!("failed to initialize system");
-        return;
+        panic!("failed to initialize system");
     };
 
     let mut system_snapshot = SystemSnapshot::new(&mut sys);
 
-    println!("{system_snapshot:?}");
-
-    system_snapshot.refresh(&mut sys);
-
-    println!("{system_snapshot:?}");
+    ratatui::run(|terminal| App::default().run(terminal));
+    Ok(())
 }
