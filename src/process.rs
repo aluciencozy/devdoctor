@@ -5,8 +5,8 @@ use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 #[derive(Debug)]
 pub struct ProcessInfo {
     pub(crate) pid: Pid,
-    command: Vec<OsString>,
-    cwd: Option<PathBuf>,
+    pub(crate) command: Vec<OsString>,
+    pub(crate) cwd: Option<PathBuf>,
 }
 
 pub fn get_processes(sys: &mut System) -> Vec<ProcessInfo> {

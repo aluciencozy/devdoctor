@@ -7,7 +7,7 @@ use listeners::{Protocol, SocketState};
 #[derive(Debug)]
 pub struct ListeningSocket {
     pub(crate) pid: Pid,
-    socket: SocketAddr,
+    pub(crate) socket: SocketAddr,
     protocol: Protocol,
 }
 

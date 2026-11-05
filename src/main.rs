@@ -1,14 +1,11 @@
-use std::io;
-
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use color_eyre::Result;
+use crossterm::event::{self, KeyCode};
 use ratatui::{
-    DefaultTerminal, Frame,
-    buffer::Buffer,
-    layout::Rect,
-    style::Stylize,
-    symbols::border,
-    text::{Line, Text},
-    widgets::{Block, Paragraph, Widget},
+    Frame,
+    layout::{Constraint, Layout, Rect},
+    style::{Style, Stylize},
+    text::Line,
+    widgets::{Block, Row, Table, TableState},
 };
 use snapshot::SystemSnapshot;
 use sysinfo::System;
@@ -18,80 +15,118 @@ mod process;
 mod runtime;
 mod snapshot;
 
-#[derive(Default, Debug)]
-struct App {
-    system_snapshot: SystemSnapshot,
-    exit: bool,
-}
+fn main() -> Result<()> {
+    color_eyre::install()?;
 
-impl App {
-    /// runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
-        while !self.exit {
-            terminal.draw(|frame| self.draw(frame))?;
-            self.handle_events()?;
-        }
-        Ok(())
-    }
+    let mut sys = System::new()?;
+    let mut snapshot = SystemSnapshot::new(&mut sys);
 
-    fn draw(&self, frame: &mut Frame) {
-        frame.render_widget(self, frame.area());
-    }
+    let mut table_state = TableState::default();
+    table_state.select_first();
 
-    fn handle_events(&mut self) -> io::Result<()> {
-        match event::read()? {
-            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)
+    ratatui::run(|terminal| {
+        loop {
+            terminal.draw(|frame| render(frame, &snapshot, &mut table_state))?;
+
+            if let Some(key) = event::read()?.as_key_press_event() {
+                match key.code {
+                    KeyCode::Char('q') | KeyCode::Esc => return Ok(()),
+
+                    KeyCode::Char('j') | KeyCode::Down => {
+                        table_state.select_next();
+                    }
+
+                    KeyCode::Char('k') | KeyCode::Up => {
+                        table_state.select_previous();
+                    }
+
+                    KeyCode::Char('g') => table_state.select_first(),
+                    KeyCode::Char('G') => table_state.select_last(),
+
+                    KeyCode::Char('r') => {
+                        snapshot.refresh(&mut sys);
+                    }
+
+                    _ => {}
+                }
             }
-            _ => {}
-        };
-        Ok(())
-    }
-
-    fn handle_key_event(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('q') => self.exit(),
-            _ => {}
         }
-    }
-
-    fn exit(&mut self) {
-        self.exit = true;
-    }
+    })
 }
 
-impl Widget for &App {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = Line::from(" Counter App Tutorial ".bold());
-        let instructions = Line::from(vec![
-            " Decrement ".into(),
-            "<Left>".blue().bold(),
-            " Increment ".into(),
-            "<Right>".blue().bold(),
-            " Quit ".into(),
-            "<Q> ".blue().bold(),
-        ]);
-        let block = Block::bordered()
-            .title(title.centered())
-            .title_bottom(instructions.centered())
-            .border_set(border::THICK);
+fn render(frame: &mut Frame, snapshot: &SystemSnapshot, table_state: &mut TableState) {
+    let layout = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).spacing(1);
 
-        let counter_text = Text::from(vec![Line::from(vec!["Value: ".into()])]);
+    let [top, main] = frame.area().layout(&layout);
 
-        Paragraph::new(counter_text)
-            .centered()
-            .block(block)
-            .render(area, buf);
-    }
+    let title = Line::from("DevDoctor | j/k: Navigate | r: Refresh | q: Quit").centered();
+
+    frame.render_widget(title, top);
+    render_table(frame, main, snapshot, table_state);
 }
 
-fn main() -> io::Result<()> {
-    let Ok(mut sys) = System::new() else {
-        panic!("failed to initialize system");
-    };
+fn render_table(
+    frame: &mut Frame,
+    area: Rect,
+    snapshot: &SystemSnapshot,
+    table_state: &mut TableState,
+) {
+    // HashMap iteration is unordered, so sort by PID.
+    let mut processes: Vec<_> = snapshot.processes_by_pid.values().collect();
 
-    let mut system_snapshot = SystemSnapshot::new(&mut sys);
+    processes.sort_unstable_by_key(|process| process.pid.as_u32());
 
-    ratatui::run(|terminal| App::default().run(terminal));
-    Ok(())
+    let rows: Vec<Row> = processes
+        .into_iter()
+        .map(|process| {
+            let pid = process.pid.to_string();
+
+            let command = process
+                .command
+                .iter()
+                .map(|arg| arg.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ");
+
+            let cwd = process
+                .cwd
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "-".to_string());
+
+            let ports = snapshot
+                .sockets_by_pid
+                .get(&process.pid)
+                .map(|sockets| {
+                    sockets
+                        .iter()
+                        .map(|socket| socket.socket.port().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
+                .unwrap_or_else(|| "-".to_string());
+
+            Row::new([pid, command, cwd, ports])
+        })
+        .collect();
+
+    let header = Row::new(["PID", "COMMAND", "CWD", "PORTS"])
+        .style(Style::new().bold())
+        .bottom_margin(1);
+
+    let widths = [
+        Constraint::Length(8),
+        Constraint::Percentage(40),
+        Constraint::Percentage(35),
+        Constraint::Fill(1),
+    ];
+
+    let table = Table::new(rows, widths)
+        .header(header)
+        .block(Block::bordered().title(" Processes "))
+        .column_spacing(1)
+        .row_highlight_style(Style::new().reversed())
+        .highlight_symbol("▶ ");
+
+    frame.render_stateful_widget(table, area, table_state);
 }
