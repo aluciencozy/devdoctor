@@ -1,6 +1,8 @@
 use color_eyre::{Result, eyre::Ok};
+use crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Layout};
-use ratatui::widgets::{Block, Paragraph};
+use ratatui::style::{Style, Stylize};
+use ratatui::widgets::{Block, List, ListState, Paragraph};
 use snapshot::SystemSnapshot;
 use sysinfo::System;
 
@@ -13,7 +15,10 @@ fn main() -> Result<()> {
     color_eyre::install()?;
 
     let mut sys = System::new()?;
-    let mut snapshot = SystemSnapshot::new(&mut sys);
+    let snapshot = SystemSnapshot::new(&mut sys);
+
+    let mut processes_state = ListState::default();
+    processes_state.select(Some(0));
 
     ratatui::run(|terminal| {
         loop {
@@ -26,9 +31,6 @@ fn main() -> Result<()> {
                     Layout::horizontal([Constraint::Percentage(30), Constraint::Fill(1)])
                         .areas(main_area);
 
-                let body_panel = Paragraph::new("Details will go here")
-                    .block(Block::bordered().title(" Details "));
-
                 let [processes_area, runtimes_area, agents_area] = Layout::vertical([
                     Constraint::Fill(2),
                     Constraint::Fill(1),
@@ -36,8 +38,8 @@ fn main() -> Result<()> {
                 ])
                 .areas(sidebar);
 
-                let processes_panel = Paragraph::new("Processes will go here")
-                    .block(Block::bordered().title(" Processes "));
+                let body_panel = Paragraph::new("Details will go here")
+                    .block(Block::bordered().title(" Details "));
 
                 let runtimes_panel = Paragraph::new("Dev tools will go here")
                     .block(Block::bordered().title(" Runtimes "));
@@ -45,16 +47,31 @@ fn main() -> Result<()> {
                 let agents_panel =
                     Paragraph::new("Coming Later").block(Block::bordered().title(" Agents "));
 
-                frame.render_widget(processes_panel, processes_area);
-                frame.render_widget(runtimes_panel, runtimes_area);
+                let mut processes: Vec<_> = snapshot.processes_by_pid.values().collect();
+                processes.sort_unstable_by_key(|process| process.pid.as_u32());
+
+                let items = processes
+                    .iter()
+                    .map(|process| format!("PID {}", process.pid));
+
+                let processes_panel = List::new(items)
+                    .block(Block::bordered().title(" Processes "))
+                    .highlight_style(Style::new().reversed())
+                    .highlight_symbol("▶ ");
+
+                frame.render_stateful_widget(processes_panel, processes_area, &mut processes_state);
                 frame.render_widget(agents_panel, agents_area);
-                frame.render_widget(body_panel, body);
                 frame.render_widget("DevDoctor | q: Quit", footer_area);
+                frame.render_widget(runtimes_panel, runtimes_area);
+                frame.render_widget(body_panel, body);
             })?;
 
             if let Some(key) = crossterm::event::read()?.as_key_press_event() {
-                if key.code == crossterm::event::KeyCode::Char('q') {
-                    break;
+                match key.code {
+                    KeyCode::Char('q') => break,
+                    KeyCode::Char('j') | KeyCode::Down => processes_state.select_next(),
+                    KeyCode::Char('k') | KeyCode::Up => processes_state.select_previous(),
+                    _ => {}
                 }
             }
         }
