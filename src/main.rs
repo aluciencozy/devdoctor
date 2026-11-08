@@ -23,6 +23,7 @@ fn main() -> Result<()> {
     ratatui::run(|terminal| {
         loop {
             terminal.draw(|frame| {
+                // get all areas
                 let [main_area, footer_area] =
                     Layout::vertical([Constraint::Fill(1), Constraint::Length(1)])
                         .areas(frame.area());
@@ -38,16 +39,25 @@ fn main() -> Result<()> {
                 ])
                 .areas(sidebar);
 
-                let runtimes_panel = Paragraph::new("Dev tools will go here")
-                    .block(Block::bordered().title(" Runtimes "));
-
+                // agents info (not completed)
                 let agents_panel =
                     Paragraph::new("Coming Later").block(Block::bordered().title(" Agents "));
 
+                // runtime info
+                let runtime_items = snapshot.runtimes.iter().map(|runtime| {
+                    let version = runtime.version.as_deref().unwrap_or("Version unavailable");
+
+                    format!("{}: {}", runtime.name, version)
+                });
+
+                let runtimes_panel =
+                    List::new(runtime_items).block(Block::bordered().title(" Runtimes "));
+
+                // process info
                 let mut processes: Vec<_> = snapshot.processes_by_pid.values().collect();
                 processes.sort_unstable_by_key(|process| process.pid.as_u32());
 
-                let items = processes.iter().map(|process| {
+                let process_items = processes.iter().map(|process| {
                     let label = process
                         .command
                         .first()
@@ -57,13 +67,14 @@ fn main() -> Result<()> {
                     format!("{}  {}", process.pid, label)
                 });
 
-                let processes_panel = List::new(items)
+                let processes_panel = List::new(process_items)
                     .block(Block::bordered().title(" Processes "))
                     .highlight_style(Style::new().reversed())
                     .highlight_symbol("▶ ");
 
                 frame.render_stateful_widget(processes_panel, processes_area, &mut processes_state);
 
+                // main block details info
                 let selected_process = processes_state
                     .selected()
                     .and_then(|index| processes.get(index));
@@ -110,12 +121,12 @@ fn main() -> Result<()> {
                     .wrap(Wrap { trim: false });
 
                 frame.render_widget(agents_panel, agents_area);
+                frame.render_widget(runtimes_panel, runtimes_area);
+                frame.render_widget(body_panel, body);
                 frame.render_widget(
                     "DevDoctor | j/k: Navigate | r: Refresh | q: Quit",
                     footer_area,
                 );
-                frame.render_widget(runtimes_panel, runtimes_area);
-                frame.render_widget(body_panel, body);
             })?;
 
             if let Some(key) = crossterm::event::read()?.as_key_press_event() {

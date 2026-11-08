@@ -6,9 +6,9 @@ use std::{env, path::PathBuf};
 
 #[derive(Debug)]
 pub struct Runtime {
-    name: String,
+    pub(crate) name: String,
     exec_path: Option<PathBuf>,
-    version: Option<String>,
+    pub(crate) version: Option<String>,
 }
 
 fn find_executable(executable: &str) -> Option<PathBuf> {

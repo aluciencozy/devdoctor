@@ -8,7 +8,7 @@ use crate::runtime::{Runtime, get_runtimes};
 
 #[derive(Debug, Default)]
 pub struct SystemSnapshot {
-    runtimes: Vec<Runtime>,
+    pub(crate) runtimes: Vec<Runtime>,
     pub(crate) processes_by_pid: HashMap<Pid, ProcessInfo>,
     pub(crate) sockets_by_pid: HashMap<Pid, Vec<ListeningSocket>>,
 }
