@@ -105,7 +105,7 @@ fn main() -> Result<()> {
                     .selected()
                     .and_then(|index| processes.get(index));
 
-                let details = match selected_process {
+                let process_details = match selected_process {
                     Some(process) => {
                         let command = process
                             .command
@@ -140,6 +140,33 @@ fn main() -> Result<()> {
                         )
                     }
                     None => "No process selected".to_string(),
+                };
+
+                let selected_runtime = runtimes_state
+                    .selected()
+                    .and_then(|index| snapshot.runtimes.get(index));
+
+                let runtime_details = match selected_runtime {
+                    Some(runtime) => {
+                        let path = runtime
+                            .exec_path
+                            .as_ref()
+                            .map(|path| path.display().to_string())
+                            .unwrap_or_else(|| "Not found on PATH".to_string());
+
+                        let version = runtime.version.as_deref().unwrap_or("Version unavailable");
+
+                        format!(
+                            "Tool: {}\n\nExecutable:\n{}\n\nVersion:\n{}",
+                            runtime.name, path, version
+                        )
+                    }
+                    None => "No runtime selected".to_string(),
+                };
+
+                let details = match focus {
+                    Focus::Processes => process_details,
+                    Focus::Runtimes => runtime_details,
                 };
 
                 let body_panel = Paragraph::new(details)

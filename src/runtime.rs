@@ -7,7 +7,7 @@ use std::{env, path::PathBuf};
 #[derive(Debug)]
 pub struct Runtime {
     pub(crate) name: String,
-    exec_path: Option<PathBuf>,
+    pub(crate) exec_path: Option<PathBuf>,
     pub(crate) version: Option<String>,
 }
 
