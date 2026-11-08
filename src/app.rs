@@ -73,10 +73,10 @@ impl App {
         loop {
             terminal.draw(|frame| crate::ui::draw(frame, self))?;
 
-            if let Some(key) = crossterm::event::read()?.as_key_press_event() {
-                if self.handle_key(key.code) {
-                    break;
-                }
+            if let Some(key) = crossterm::event::read()?.as_key_press_event()
+                && self.handle_key(key.code)
+            {
+                break;
             }
         }
 
