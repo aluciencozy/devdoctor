@@ -47,9 +47,15 @@ fn main() -> Result<()> {
                 let mut processes: Vec<_> = snapshot.processes_by_pid.values().collect();
                 processes.sort_unstable_by_key(|process| process.pid.as_u32());
 
-                let items = processes
-                    .iter()
-                    .map(|process| format!("PID {}", process.pid));
+                let items = processes.iter().map(|process| {
+                    let label = process
+                        .command
+                        .first()
+                        .map(|arg| arg.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| "[command unavailable]".to_string());
+
+                    format!("{}  {}", process.pid, label)
+                });
 
                 let processes_panel = List::new(items)
                     .block(Block::bordered().title(" Processes "))
@@ -104,7 +110,10 @@ fn main() -> Result<()> {
                     .wrap(Wrap { trim: false });
 
                 frame.render_widget(agents_panel, agents_area);
-                frame.render_widget("DevDoctor | q: Quit", footer_area);
+                frame.render_widget(
+                    "DevDoctor | j/k: Navigate | r: Refresh | q: Quit",
+                    footer_area,
+                );
                 frame.render_widget(runtimes_panel, runtimes_area);
                 frame.render_widget(body_panel, body);
             })?;
@@ -114,6 +123,14 @@ fn main() -> Result<()> {
                     KeyCode::Char('q') => break,
                     KeyCode::Char('j') | KeyCode::Down => processes_state.select_next(),
                     KeyCode::Char('k') | KeyCode::Up => processes_state.select_previous(),
+                    KeyCode::Char('g') | KeyCode::Home => processes_state.select_first(),
+                    KeyCode::Char('G') | KeyCode::End => processes_state.select_last(),
+                    KeyCode::PageDown => processes_state.scroll_down_by(10),
+                    KeyCode::PageUp => processes_state.scroll_up_by(10),
+                    KeyCode::Char('r') => {
+                        snapshot.refresh(&mut sys);
+                        processes_state.select(Some(0));
+                    }
                     _ => {}
                 }
             }
