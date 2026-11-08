@@ -2,7 +2,7 @@ use std::{ffi::OsString, path::PathBuf};
 
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessInfo {
     pub(crate) pid: Pid,
     pub(crate) command: Vec<OsString>,

@@ -4,7 +4,7 @@ use sysinfo::Pid;
 
 use listeners::{Protocol, SocketState};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListeningSocket {
     pub(crate) pid: Pid,
     pub(crate) socket: SocketAddr,

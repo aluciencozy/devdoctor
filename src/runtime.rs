@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::Command;
 use std::{env, path::PathBuf};
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Runtime {
     pub(crate) name: String,
     pub(crate) exec_path: Option<PathBuf>,

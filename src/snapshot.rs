@@ -6,7 +6,7 @@ use crate::listener::{ListeningSocket, get_listening_sockets};
 use crate::process::{ProcessInfo, get_processes};
 use crate::runtime::{Runtime, get_runtimes};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SystemSnapshot {
     pub(crate) runtimes: Vec<Runtime>,
     pub(crate) processes_by_pid: HashMap<Pid, ProcessInfo>,

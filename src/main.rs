@@ -11,10 +11,19 @@ mod process;
 mod runtime;
 mod snapshot;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Focus {
     Processes,
     Runtimes,
+}
+
+#[derive(Debug)]
+struct App {
+    sys: System,
+    snapshot: SystemSnapshot,
+    focus: Focus,
+    proccesses_state: ListState,
+    runtimes_state: ListState,
 }
 
 fn main() -> Result<()> {
@@ -49,16 +58,16 @@ fn main() -> Result<()> {
                 ])
                 .areas(sidebar);
 
-                let processes_title = if focus == Focus::Processes {
-                    " Processes [active] "
+                let processes_border = if focus == Focus::Processes {
+                    Style::new().cyan()
                 } else {
-                    " Processes "
+                    Style::new()
                 };
 
-                let runtimes_title = if focus == Focus::Runtimes {
-                    " Runtimes [active] "
+                let runtimes_border = if focus == Focus::Runtimes {
+                    Style::new().cyan()
                 } else {
-                    " Runtimes "
+                    Style::new()
                 };
 
                 // agents info (not completed)
@@ -73,7 +82,11 @@ fn main() -> Result<()> {
                 });
 
                 let runtimes_panel = List::new(runtime_items)
-                    .block(Block::bordered().title(runtimes_title))
+                    .block(
+                        Block::bordered()
+                            .title(" Runtimes ")
+                            .border_style(runtimes_border),
+                    )
                     .highlight_style(Style::new().reversed())
                     .highlight_symbol("▶ ");
 
@@ -94,7 +107,11 @@ fn main() -> Result<()> {
                 });
 
                 let processes_panel = List::new(process_items)
-                    .block(Block::bordered().title(processes_title))
+                    .block(
+                        Block::bordered()
+                            .title(" Processes ")
+                            .border_style(processes_border),
+                    )
                     .highlight_style(Style::new().reversed())
                     .highlight_symbol("▶ ");
 
