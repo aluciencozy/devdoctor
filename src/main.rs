@@ -2,42 +2,21 @@ use color_eyre::{Result, eyre::Ok};
 use crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Style, Stylize};
-use ratatui::widgets::{Block, List, ListState, Paragraph, Wrap};
-use snapshot::SystemSnapshot;
-use sysinfo::System;
+use ratatui::widgets::{Block, List, Paragraph, Wrap};
 
+use app::{App, Focus};
+
+mod app;
 mod listener;
 mod process;
 mod runtime;
 mod snapshot;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Focus {
-    Processes,
-    Runtimes,
-}
-
-#[derive(Debug)]
-struct App {
-    sys: System,
-    snapshot: SystemSnapshot,
-    focus: Focus,
-    proccesses_state: ListState,
-    runtimes_state: ListState,
-}
+mod ui;
 
 fn main() -> Result<()> {
     color_eyre::install()?;
 
-    let mut sys = System::new()?;
-    let mut snapshot = SystemSnapshot::new(&mut sys);
-    let mut focus = Focus::Processes;
-
-    let mut processes_state = ListState::default();
-    processes_state.select(Some(0));
-
-    let mut runtimes_state = ListState::default();
-    runtimes_state.select(Some(0));
+    let mut app = App::new()?;
 
     ratatui::run(|terminal| {
         loop {
@@ -58,13 +37,13 @@ fn main() -> Result<()> {
                 ])
                 .areas(sidebar);
 
-                let processes_border = if focus == Focus::Processes {
+                let processes_border = if app.focus == Focus::Processes {
                     Style::new().cyan()
                 } else {
                     Style::new()
                 };
 
-                let runtimes_border = if focus == Focus::Runtimes {
+                let runtimes_border = if app.focus == Focus::Runtimes {
                     Style::new().cyan()
                 } else {
                     Style::new()
@@ -75,7 +54,7 @@ fn main() -> Result<()> {
                     Paragraph::new("Coming Later").block(Block::bordered().title(" Agents "));
 
                 // runtime info
-                let runtime_items = snapshot.runtimes.iter().map(|runtime| {
+                let runtime_items = app.snapshot.runtimes.iter().map(|runtime| {
                     let version = runtime.version.as_deref().unwrap_or("Version unavailable");
 
                     format!("{}: {}", runtime.name, version)
@@ -90,10 +69,14 @@ fn main() -> Result<()> {
                     .highlight_style(Style::new().reversed())
                     .highlight_symbol("▶ ");
 
-                frame.render_stateful_widget(runtimes_panel, runtimes_area, &mut runtimes_state);
+                frame.render_stateful_widget(
+                    runtimes_panel,
+                    runtimes_area,
+                    &mut app.runtimes_state,
+                );
 
                 // process info
-                let mut processes: Vec<_> = snapshot.processes_by_pid.values().collect();
+                let mut processes: Vec<_> = app.snapshot.processes_by_pid.values().collect();
                 processes.sort_unstable_by_key(|process| process.pid.as_u32());
 
                 let process_items = processes.iter().map(|process| {
@@ -115,10 +98,15 @@ fn main() -> Result<()> {
                     .highlight_style(Style::new().reversed())
                     .highlight_symbol("▶ ");
 
-                frame.render_stateful_widget(processes_panel, processes_area, &mut processes_state);
+                frame.render_stateful_widget(
+                    processes_panel,
+                    processes_area,
+                    &mut app.processes_state,
+                );
 
                 // main block details info
-                let selected_process = processes_state
+                let selected_process = app
+                    .processes_state
                     .selected()
                     .and_then(|index| processes.get(index));
 
@@ -137,7 +125,8 @@ fn main() -> Result<()> {
                             .map(|path| path.display().to_string())
                             .unwrap_or_else(|| "Unavailable".to_string());
 
-                        let listeners = snapshot
+                        let listeners = app
+                            .snapshot
                             .sockets_by_pid
                             .get(&process.pid)
                             .map(|sockets| {
@@ -159,9 +148,10 @@ fn main() -> Result<()> {
                     None => "No process selected".to_string(),
                 };
 
-                let selected_runtime = runtimes_state
+                let selected_runtime = app
+                    .runtimes_state
                     .selected()
-                    .and_then(|index| snapshot.runtimes.get(index));
+                    .and_then(|index| app.snapshot.runtimes.get(index));
 
                 let runtime_details = match selected_runtime {
                     Some(runtime) => {
@@ -181,7 +171,7 @@ fn main() -> Result<()> {
                     None => "No runtime selected".to_string(),
                 };
 
-                let details = match focus {
+                let details = match app.focus {
                     Focus::Processes => process_details,
                     Focus::Runtimes => runtime_details,
                 };
@@ -199,16 +189,16 @@ fn main() -> Result<()> {
             })?;
 
             if let Some(key) = crossterm::event::read()?.as_key_press_event() {
-                let active_state = match focus {
-                    Focus::Processes => &mut processes_state,
-                    Focus::Runtimes => &mut runtimes_state,
+                let active_state = match app.focus {
+                    Focus::Processes => &mut app.processes_state,
+                    Focus::Runtimes => &mut app.runtimes_state,
                 };
 
                 match key.code {
                     KeyCode::Char('q') => break,
 
                     KeyCode::Tab => {
-                        focus = match focus {
+                        app.focus = match app.focus {
                             Focus::Processes => Focus::Runtimes,
                             Focus::Runtimes => Focus::Processes,
                         };
@@ -222,9 +212,9 @@ fn main() -> Result<()> {
                     KeyCode::PageUp => active_state.scroll_up_by(10),
 
                     KeyCode::Char('r') => {
-                        snapshot.refresh(&mut sys);
-                        processes_state.select_first();
-                        runtimes_state.select_first();
+                        app.snapshot.refresh(&mut app.sys);
+                        app.processes_state.select_first();
+                        app.runtimes_state.select_first();
                     }
 
                     _ => {}
