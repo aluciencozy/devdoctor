@@ -10,12 +10,19 @@ pub(crate) struct App {
     pub(crate) focus: Focus,
     pub(crate) processes_state: ListState,
     pub(crate) runtimes_state: ListState,
+    pub(crate) process_filter: ProcessFilter,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Focus {
     Processes,
     Runtimes,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProcessFilter {
+    All,
+    Listening,
 }
 
 impl App {
@@ -36,6 +43,7 @@ impl App {
             focus,
             processes_state,
             runtimes_state,
+            process_filter: ProcessFilter::All,
         })
     }
 
@@ -68,6 +76,15 @@ impl App {
                     KeyCode::Char('G') | KeyCode::End => active_state.select_last(),
                     KeyCode::PageDown => active_state.scroll_down_by(10),
                     KeyCode::PageUp => active_state.scroll_up_by(10),
+
+                    KeyCode::Char('f') if self.focus == Focus::Processes => {
+                        self.process_filter = match self.process_filter {
+                            ProcessFilter::All => ProcessFilter::Listening,
+                            ProcessFilter::Listening => ProcessFilter::All,
+                        };
+
+                        self.processes_state.select_first();
+                    }
 
                     KeyCode::Char('r') => {
                         self.snapshot.refresh(&mut self.sys);

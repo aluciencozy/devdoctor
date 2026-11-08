@@ -3,7 +3,7 @@ use ratatui::layout::{Constraint, Layout};
 use ratatui::style::Style;
 use ratatui::widgets::{Block, List, Paragraph, Wrap};
 
-use crate::app::{App, Focus};
+use crate::app::{App, Focus, ProcessFilter};
 
 pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     // get all areas
@@ -54,7 +54,15 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     frame.render_stateful_widget(runtimes_panel, runtimes_area, &mut app.runtimes_state);
 
     // process info
-    let mut processes: Vec<_> = app.snapshot.processes_by_pid.values().collect();
+    let mut processes: Vec<_> = app
+        .snapshot
+        .processes_by_pid
+        .values()
+        .filter(|process| match app.process_filter {
+            ProcessFilter::All => true,
+            ProcessFilter::Listening => app.snapshot.sockets_by_pid.contains_key(&process.pid),
+        })
+        .collect();
     processes.sort_unstable_by_key(|process| process.pid.as_u32());
 
     let process_items = processes.iter().map(|process| {
@@ -67,10 +75,15 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         format!("{}  {}", process.pid, label)
     });
 
+    let processes_title = match app.process_filter {
+        ProcessFilter::All => " Processes | [All] Listening ",
+        ProcessFilter::Listening => " Processes | All [Listening] ",
+    };
+
     let processes_panel = List::new(process_items)
         .block(
             Block::bordered()
-                .title(" Processes ")
+                .title(processes_title)
                 .border_style(processes_border),
         )
         .highlight_style(Style::new().reversed())
@@ -156,7 +169,8 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     frame.render_widget(agents_panel, agents_area);
     frame.render_widget(body_panel, body);
     frame.render_widget(
-        "DevDoctor | j/k: Navigate | Tab: Switch panel | r: Refresh | q: Quit",
+        "DevDoctor | j/k: Navigate | Tab: Switch panel | f: Filter Processes | r: Refresh | q: \
+         Quit",
         footer_area,
     );
 }
