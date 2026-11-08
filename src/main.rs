@@ -11,14 +11,24 @@ mod process;
 mod runtime;
 mod snapshot;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Focus {
+    Processes,
+    Runtimes,
+}
+
 fn main() -> Result<()> {
     color_eyre::install()?;
 
     let mut sys = System::new()?;
     let mut snapshot = SystemSnapshot::new(&mut sys);
+    let mut focus = Focus::Processes;
 
     let mut processes_state = ListState::default();
     processes_state.select(Some(0));
+
+    let mut runtimes_state = ListState::default();
+    runtimes_state.select(Some(0));
 
     ratatui::run(|terminal| {
         loop {
@@ -39,6 +49,18 @@ fn main() -> Result<()> {
                 ])
                 .areas(sidebar);
 
+                let processes_title = if focus == Focus::Processes {
+                    " Processes [active] "
+                } else {
+                    " Processes "
+                };
+
+                let runtimes_title = if focus == Focus::Runtimes {
+                    " Runtimes [active] "
+                } else {
+                    " Runtimes "
+                };
+
                 // agents info (not completed)
                 let agents_panel =
                     Paragraph::new("Coming Later").block(Block::bordered().title(" Agents "));
@@ -50,8 +72,12 @@ fn main() -> Result<()> {
                     format!("{}: {}", runtime.name, version)
                 });
 
-                let runtimes_panel =
-                    List::new(runtime_items).block(Block::bordered().title(" Runtimes "));
+                let runtimes_panel = List::new(runtime_items)
+                    .block(Block::bordered().title(runtimes_title))
+                    .highlight_style(Style::new().reversed())
+                    .highlight_symbol("▶ ");
+
+                frame.render_stateful_widget(runtimes_panel, runtimes_area, &mut runtimes_state);
 
                 // process info
                 let mut processes: Vec<_> = snapshot.processes_by_pid.values().collect();
@@ -68,7 +94,7 @@ fn main() -> Result<()> {
                 });
 
                 let processes_panel = List::new(process_items)
-                    .block(Block::bordered().title(" Processes "))
+                    .block(Block::bordered().title(processes_title))
                     .highlight_style(Style::new().reversed())
                     .highlight_symbol("▶ ");
 
@@ -121,27 +147,42 @@ fn main() -> Result<()> {
                     .wrap(Wrap { trim: false });
 
                 frame.render_widget(agents_panel, agents_area);
-                frame.render_widget(runtimes_panel, runtimes_area);
                 frame.render_widget(body_panel, body);
                 frame.render_widget(
-                    "DevDoctor | j/k: Navigate | r: Refresh | q: Quit",
+                    "DevDoctor | j/k: Navigate | Tab: Switch panel | r: Refresh | q: Quit",
                     footer_area,
                 );
             })?;
 
             if let Some(key) = crossterm::event::read()?.as_key_press_event() {
+                let active_state = match focus {
+                    Focus::Processes => &mut processes_state,
+                    Focus::Runtimes => &mut runtimes_state,
+                };
+
                 match key.code {
                     KeyCode::Char('q') => break,
-                    KeyCode::Char('j') | KeyCode::Down => processes_state.select_next(),
-                    KeyCode::Char('k') | KeyCode::Up => processes_state.select_previous(),
-                    KeyCode::Char('g') | KeyCode::Home => processes_state.select_first(),
-                    KeyCode::Char('G') | KeyCode::End => processes_state.select_last(),
-                    KeyCode::PageDown => processes_state.scroll_down_by(10),
-                    KeyCode::PageUp => processes_state.scroll_up_by(10),
+
+                    KeyCode::Tab => {
+                        focus = match focus {
+                            Focus::Processes => Focus::Runtimes,
+                            Focus::Runtimes => Focus::Processes,
+                        };
+                    }
+
+                    KeyCode::Char('j') | KeyCode::Down => active_state.select_next(),
+                    KeyCode::Char('k') | KeyCode::Up => active_state.select_previous(),
+                    KeyCode::Char('g') | KeyCode::Home => active_state.select_first(),
+                    KeyCode::Char('G') | KeyCode::End => active_state.select_last(),
+                    KeyCode::PageDown => active_state.scroll_down_by(10),
+                    KeyCode::PageUp => active_state.scroll_up_by(10),
+
                     KeyCode::Char('r') => {
                         snapshot.refresh(&mut sys);
-                        processes_state.select(Some(0));
+                        processes_state.select_first();
+                        runtimes_state.select_first();
                     }
+
                     _ => {}
                 }
             }
