@@ -3,13 +3,13 @@ use std::{ffi::OsString, path::PathBuf};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProcessInfo {
+pub(crate) struct ProcessInfo {
     pub(crate) pid: Pid,
     pub(crate) command: Vec<OsString>,
     pub(crate) cwd: Option<PathBuf>,
 }
 
-pub fn get_processes(sys: &mut System) -> Vec<ProcessInfo> {
+pub(crate) fn get_processes(sys: &mut System) -> Vec<ProcessInfo> {
     let r = ProcessRefreshKind::nothing();
     let r = r
         .with_cwd(UpdateKind::Always)

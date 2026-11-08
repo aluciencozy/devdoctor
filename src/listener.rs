@@ -5,13 +5,13 @@ use sysinfo::Pid;
 use listeners::{Protocol, SocketState};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ListeningSocket {
+pub(crate) struct ListeningSocket {
     pub(crate) pid: Pid,
     pub(crate) socket: SocketAddr,
     protocol: Protocol,
 }
 
-pub fn get_listening_sockets() -> Result<Vec<ListeningSocket>, String> {
+pub(crate) fn get_listening_sockets() -> Result<Vec<ListeningSocket>, String> {
     let mut ports = Vec::new();
 
     match listeners::get_all() {

@@ -7,14 +7,14 @@ use crate::process::{ProcessInfo, get_processes};
 use crate::runtime::{Runtime, get_runtimes};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SystemSnapshot {
+pub(crate) struct SystemSnapshot {
     pub(crate) runtimes: Vec<Runtime>,
     pub(crate) processes_by_pid: HashMap<Pid, ProcessInfo>,
     pub(crate) sockets_by_pid: HashMap<Pid, Vec<ListeningSocket>>,
 }
 
 impl SystemSnapshot {
-    pub fn new(sys: &mut System) -> Self {
+    pub(crate) fn new(sys: &mut System) -> Self {
         let runtimes = get_runtimes();
 
         let processes_by_pid: HashMap<_, _> = get_processes(sys)
@@ -36,7 +36,7 @@ impl SystemSnapshot {
         }
     }
 
-    pub fn refresh(&mut self, sys: &mut System) {
+    pub(crate) fn refresh(&mut self, sys: &mut System) {
         self.processes_by_pid = get_processes(sys)
             .into_iter()
             .map(|proc| (proc.pid, proc))

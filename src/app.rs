@@ -4,8 +4,8 @@ use ratatui::widgets::ListState;
 use sysinfo::{Error, System};
 
 #[derive(Debug)]
-pub struct App {
-    pub(crate) sys: System,
+pub(crate) struct App {
+    sys: System,
     pub(crate) snapshot: SystemSnapshot,
     pub(crate) focus: Focus,
     pub(crate) processes_state: ListState,
@@ -13,7 +13,7 @@ pub struct App {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Focus {
+pub(crate) enum Focus {
     Processes,
     Runtimes,
 }

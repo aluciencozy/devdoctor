@@ -5,7 +5,7 @@ use std::process::Command;
 use std::{env, path::PathBuf};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Runtime {
+pub(crate) struct Runtime {
     pub(crate) name: String,
     pub(crate) exec_path: Option<PathBuf>,
     pub(crate) version: Option<String>,
@@ -80,7 +80,7 @@ fn get_version(path: &Path) -> Result<String, String> {
     }
 }
 
-pub fn get_runtimes() -> Vec<Runtime> {
+pub(crate) fn get_runtimes() -> Vec<Runtime> {
     let executables = ["python", "rustc", "cargo", "node"];
     let mut runtimes: Vec<Runtime> = Vec::new();
 
