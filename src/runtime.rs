@@ -61,12 +61,7 @@ fn run_version_command(
     Ok(output.into_std_lossy())
 }
 
-fn get_version(path: &Path) -> Result<String, VersionError> {
-    let mut command = Command::new(path);
-    command.arg("--version");
-
-    let out = run_version_command(&mut command, VERSION_TIMEOUT)?;
-
+fn parse_version_output(out: std::process::Output) -> Result<String, VersionError> {
     if !out.status.success() {
         return Err(VersionError::Unsuccessful {
             status: out.status,
@@ -88,6 +83,14 @@ fn get_version(path: &Path) -> Result<String, VersionError> {
     } else {
         Ok(version.to_owned())
     }
+}
+
+fn get_version(path: &Path) -> Result<String, VersionError> {
+    let mut command = Command::new(path);
+    command.arg("--version");
+
+    let out = run_version_command(&mut command, VERSION_TIMEOUT)?;
+    parse_version_output(out)
 }
 
 fn discover_candidates(executable: &str) -> Result<Vec<ExecutableCandidate>, which::Error> {
@@ -114,4 +117,58 @@ pub(crate) fn get_runtimes() -> Vec<Runtime> {
             candidates: discover_candidates(executable),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::{ExitStatus, Output};
+
+    fn output(exit_code: u8, stdout: &str, stderr: &str) -> Output {
+        #[cfg(unix)]
+        let status = {
+            use std::os::unix::process::ExitStatusExt;
+            ExitStatus::from_raw(i32::from(exit_code) << 8)
+        };
+
+        #[cfg(windows)]
+        let status = {
+            use std::os::windows::process::ExitStatusExt;
+            ExitStatus::from_raw(u32::from(exit_code))
+        };
+
+        Output {
+            status,
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: stderr.as_bytes().to_vec(),
+        }
+    }
+
+    #[test]
+    fn prefers_stdout_and_trims_whitespace() {
+        let result = parse_version_output(output(0, "  v24.0.0\n", "some warning"));
+
+        assert_eq!(result.unwrap(), "v24.0.0");
+    }
+
+    #[test]
+    fn accepts_stderr_when_stdout_is_blank() {
+        let result = parse_version_output(output(0, " \n", "Python 3.14.0\n"));
+
+        assert_eq!(result.unwrap(), "Python 3.14.0");
+    }
+
+    #[test]
+    fn rejects_successful_commands_without_text() {
+        let result = parse_version_output(output(0, " \n", "\t"));
+
+        assert!(matches!(result, Err(VersionError::EmptyOutput)));
+    }
+
+    #[test]
+    fn rejects_unsuccessful_commands_even_with_version_text() {
+        let result = parse_version_output(output(1, "v24.0.0", "something went wrong"));
+
+        assert!(matches!(result, Err(VersionError::Unsuccessful { .. })));
+    }
 }
