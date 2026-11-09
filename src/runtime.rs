@@ -41,23 +41,31 @@ fn find_all_executables(executable: &str) -> Result<Vec<PathBuf>, which::Error> 
     Ok(paths.collect())
 }
 
-fn get_version(path: &Path) -> Result<String, VersionError> {
-    let child = Command::new(path)
-        .arg("--version")
+fn run_version_command(
+    command: &mut Command,
+    timeout: Duration,
+) -> Result<std::process::Output, VersionError> {
+    let child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
 
-    let out = child
+    let output = child
         .controlled_with_output()
-        .time_limit(VERSION_TIMEOUT)
+        .time_limit(timeout)
         .terminate_for_timeout()
         .wait()?
-        .ok_or(VersionError::TimedOut {
-            limit: VERSION_TIMEOUT,
-        })?
-        .into_std_lossy();
+        .ok_or(VersionError::TimedOut { limit: timeout })?;
+
+    Ok(output.into_std_lossy())
+}
+
+fn get_version(path: &Path) -> Result<String, VersionError> {
+    let mut command = Command::new(path);
+    command.arg("--version");
+
+    let out = run_version_command(&mut command, VERSION_TIMEOUT)?;
 
     if !out.status.success() {
         return Err(VersionError::Unsuccessful {
