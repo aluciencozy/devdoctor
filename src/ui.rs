@@ -69,12 +69,16 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
 
     // runtime info
     let runtime_items = app.snapshot.runtimes.iter().map(|runtime| {
-        let version = runtime.version.as_deref().unwrap_or("Version unavailable");
+        let summary = match &runtime.candidates {
+            Ok(candidates) if candidates.is_empty() => "Not found".to_string(),
+            Ok(candidates) => format!("{} on PATH", candidates.len()),
+            Err(_) => "Lookup failed".to_string(),
+        };
 
         ListItem::new(Line::from(vec![
             Span::styled(runtime.name.clone(), Style::new().fg(GREEN)),
             Span::raw("  "),
-            Span::styled(version.to_string(), Style::new().fg(MUTED)),
+            Span::styled(summary, Style::new().fg(MUTED)),
         ]))
     });
 
@@ -207,18 +211,41 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
 
     let runtime_details = match selected_runtime {
         Some(runtime) => {
-            let path = runtime
-                .exec_path
-                .as_ref()
-                .map(|path| path.display().to_string())
-                .unwrap_or_else(|| "Not found on PATH".to_string());
+            let executables = match &runtime.candidates {
+                Ok(candidates) if candidates.is_empty() => {
+                    "No executable found on PATH".to_string()
+                }
+                Ok(candidates) => candidates
+                    .iter()
+                    .enumerate()
+                    .map(|(index, candidate)| {
+                        let precedence = if index == 0 {
+                            "first PATH match"
+                        } else {
+                            "later PATH match"
+                        };
 
-            let version = runtime.version.as_deref().unwrap_or("Version unavailable");
+                        let version = match &candidate.version {
+                            Ok(version) => version.clone(),
+                            Err(error) => format!("Version check failed: {error}"),
+                        };
+
+                        format!(
+                            "{}. {} ({})\n{}",
+                            index + 1,
+                            candidate.path.display(),
+                            precedence,
+                            version,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n\n"),
+                Err(error) => format!("Executable lookup failed: {error}"),
+            };
 
             detail_sections([
                 ("TOOL", runtime.name.clone()),
-                ("EXECUTABLE", path),
-                ("VERSION", version.to_string()),
+                ("EXECUTABLES · PATH ORDER", executables),
             ])
         }
         None => Text::from("No runtime selected"),
@@ -314,6 +341,10 @@ fn detail_sections(sections: impl IntoIterator<Item = (&'static str, String)>) -
         }
         text.lines
             .push(Line::styled(label, Style::new().fg(BLUE).bold()));
+
+        // value could contain multiple lines (ex: listening addresses)
+        // converting to Text splits its newlines into separate Lines
+        // then extend appends all of them
         text.lines.extend(Text::from(value).lines);
     }
     text
@@ -326,6 +357,7 @@ fn status_details(snapshot: &SystemSnapshot, width: u16) -> Text<'static> {
     } else {
         "[ DevDoctor ]"
     };
+
     let mut lines = vec![Line::from("")];
     lines.extend(
         logo.lines()
@@ -344,8 +376,14 @@ fn status_details(snapshot: &SystemSnapshot, width: u16) -> Text<'static> {
     let tools_found = snapshot
         .runtimes
         .iter()
-        .filter(|runtime| runtime.exec_path.is_some())
+        .filter(|runtime| {
+            runtime
+                .candidates
+                .as_ref()
+                .is_ok_and(|candidates| !candidates.is_empty())
+        })
         .count();
+
     for (label, value) in [
         ("Version   ", env!("CARGO_PKG_VERSION").to_string()),
         (

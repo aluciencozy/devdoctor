@@ -1,103 +1,87 @@
-use std::collections::HashSet;
-use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
-use std::{env, path::PathBuf};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub(crate) struct Runtime {
     pub(crate) name: String,
-    pub(crate) exec_path: Option<PathBuf>,
-    pub(crate) version: Option<String>,
+    pub(crate) candidates: Result<Vec<ExecutableCandidate>, which::Error>,
 }
 
-fn find_executable(executable: &str) -> Option<PathBuf> {
-    let path_env = env::var_os("PATH").expect("path environment variable not found");
+#[derive(Debug)]
+pub(crate) struct ExecutableCandidate {
+    pub(crate) path: PathBuf,
+    pub(crate) version: Result<String, VersionError>,
+}
 
-    let paths_split = env::split_paths(&path_env);
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum VersionError {
+    #[error("could not run version command: {0}")]
+    Io(#[from] std::io::Error),
 
-    for mut path in paths_split {
-        path.push(executable);
-        if path.exists() {
-            return Some(path);
-        }
+    #[error("version command exited with {status}: {stderr}")]
+    Unsuccessful {
+        status: std::process::ExitStatus,
+        stderr: String,
+    },
+
+    #[error("version command succeeded but returned no vesrion text")]
+    EmptyOutput,
+}
+
+fn find_all_executables(executable: &str) -> Result<Vec<PathBuf>, which::Error> {
+    let paths = which::which_all(executable)?;
+    Ok(paths.collect())
+}
+
+fn get_version(path: &Path) -> Result<String, VersionError> {
+    let out = Command::new(path).arg("--version").output()?;
+
+    if !out.status.success() {
+        return Err(VersionError::Unsuccessful {
+            status: out.status,
+            stderr: String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        });
     }
 
-    None
-}
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
 
-fn find_all_executables(executable: &str) -> Vec<PathBuf> {
-    let path_env = env::var_os("PATH").expect("path environment variable not found");
-
-    let paths_split = env::split_paths(&path_env);
-
-    let mut all_paths: Vec<PathBuf> = Vec::new();
-    let mut seen_path: HashSet<PathBuf> = HashSet::new();
-
-    for mut path in paths_split {
-        path.push(executable);
-
-        if !path.exists() {
-            continue;
-        }
-
-        match fs::canonicalize(&path) {
-            Ok(canonicalized_path) => {
-                if seen_path.contains(&canonicalized_path) {
-                    continue;
-                }
-
-                all_paths.push(path);
-                seen_path.insert(canonicalized_path);
-            }
-            Err(e) => {
-                println!(
-                    "error canonicalizing path: {}\nskipping with error: {e}",
-                    path.display()
-                );
-            }
-        }
-    }
-
-    all_paths
-}
-
-fn get_version(path: &Path) -> Result<String, String> {
-    let out = Command::new(path)
-        .arg("--version")
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    if out.status.success() {
-        Ok(String::from(String::from_utf8_lossy(&out.stdout).trim()))
+    let version = if stdout.trim().is_empty() {
+        stderr.trim()
     } else {
-        let e = format!(
-            "Process failed\n{}\nstderr:{}",
-            out.status,
-            String::from_utf8_lossy(&out.stderr)
-        );
-        Err(e)
+        stdout.trim()
+    };
+
+    if version.is_empty() {
+        Err(VersionError::EmptyOutput)
+    } else {
+        Ok(version.to_owned())
     }
+}
+
+fn discover_candidates(executable: &str) -> Result<Vec<ExecutableCandidate>, which::Error> {
+    let paths = find_all_executables(executable)?;
+
+    let candidates = paths
+        .into_iter()
+        .map(|path| {
+            let version = get_version(&path);
+            ExecutableCandidate { path, version }
+        })
+        .collect();
+
+    Ok(candidates)
 }
 
 pub(crate) fn get_runtimes() -> Vec<Runtime> {
     let executables = ["python", "rustc", "cargo", "node"];
-    let mut runtimes: Vec<Runtime> = Vec::new();
 
-    for exec in executables {
-        let mut version = None;
-        let exec_path = find_executable(exec);
-
-        if let Some(path) = &exec_path {
-            version = get_version(path).ok();
-        }
-
-        runtimes.push(Runtime {
-            name: exec.to_string(),
-            exec_path,
-            version,
-        });
-    }
-
-    runtimes
+    executables
+        .into_iter()
+        .map(|executable| Runtime {
+            name: executable.to_string(),
+            candidates: discover_candidates(executable),
+        })
+        .collect()
 }
