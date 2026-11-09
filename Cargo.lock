@@ -66,6 +66,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "attr_alias"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f648697f71a7eddd152c1ae26151f580c69635bfcb747574886317877ccf1a5a"
+
+[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -370,6 +376,7 @@ dependencies = [
  "color-eyre",
  "crossterm",
  "listeners",
+ "process_control",
  "ratatui",
  "sysinfo",
  "thiserror 2.0.21",
@@ -1156,6 +1163,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "process_control"
+version = "5.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21ed1a985a1edcf511a65a9927151fab108e72206a2ee3c62f8946ab73dfc33d"
+dependencies = [
+ "attr_alias",
+ "libc",
+ "signal-hook",
+ "windows-sys",
 ]
 
 [[package]]

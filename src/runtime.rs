@@ -1,6 +1,10 @@
+use process_control::{ChildExt, Control};
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::time::Duration;
+
+const VERSION_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[derive(Debug)]
 pub(crate) struct Runtime {
@@ -27,6 +31,9 @@ pub(crate) enum VersionError {
 
     #[error("version command succeeded but returned no vesrion text")]
     EmptyOutput,
+
+    #[error("version command timed out after {limit:?}")]
+    TimedOut { limit: Duration },
 }
 
 fn find_all_executables(executable: &str) -> Result<Vec<PathBuf>, which::Error> {
@@ -35,7 +42,22 @@ fn find_all_executables(executable: &str) -> Result<Vec<PathBuf>, which::Error> 
 }
 
 fn get_version(path: &Path) -> Result<String, VersionError> {
-    let out = Command::new(path).arg("--version").output()?;
+    let child = Command::new(path)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+
+    let out = child
+        .controlled_with_output()
+        .time_limit(VERSION_TIMEOUT)
+        .terminate_for_timeout()
+        .wait()?
+        .ok_or(VersionError::TimedOut {
+            limit: VERSION_TIMEOUT,
+        })?
+        .into_std_lossy();
 
     if !out.status.success() {
         return Err(VersionError::Unsuccessful {
