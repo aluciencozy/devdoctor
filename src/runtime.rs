@@ -46,6 +46,9 @@ fn run_version_command(
     timeout: Duration,
 ) -> Result<std::process::Output, VersionError> {
     let child = command
+        // Corepack-backed probes must not download tools or auto-pin projects.
+        .env("COREPACK_ENABLE_NETWORK", "0")
+        .env("COREPACK_ENABLE_AUTO_PIN", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -108,7 +111,63 @@ fn discover_candidates(executable: &str) -> Result<Vec<ExecutableCandidate>, whi
 }
 
 pub(crate) fn get_runtimes() -> Vec<Runtime> {
-    let executables = ["python", "rustc", "cargo", "node"];
+    // These tools support the --version argument used by get_version.
+    let executables = [
+        // Python and its tooling.
+        "python",
+        "python3",
+        "pip",
+        "pip3",
+        "uv",
+        "poetry",
+        "pipx",
+        "ruff",
+        // JavaScript and TypeScript.
+        "node",
+        "npm",
+        "pnpm",
+        "yarn",
+        "bun",
+        "deno",
+        "tsc",
+        // Rust and other language toolchains.
+        "rustc",
+        "cargo",
+        "rustup",
+        "ruby",
+        "gem",
+        "bundler",
+        "php",
+        "composer",
+        "java",
+        "javac",
+        "dotnet",
+        "zig",
+        // Native compilation and build tools.
+        "gcc",
+        "g++",
+        "clang",
+        "clang++",
+        "cmake",
+        "make",
+        "ninja",
+        // Source control, containers, and infrastructure.
+        "git",
+        "gh",
+        "docker",
+        "podman",
+        "terraform",
+        "tofu",
+        "ansible",
+        "aws",
+        // Database clients and runtime managers.
+        "psql",
+        "sqlite3",
+        "fnm",
+        "pyenv",
+        "rbenv",
+        "mise",
+    ];
 
     executables
         .into_iter()
