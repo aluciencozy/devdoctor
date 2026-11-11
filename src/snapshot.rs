@@ -11,6 +11,7 @@ pub(crate) struct SystemSnapshot {
     pub(crate) runtimes: Vec<Runtime>,
     pub(crate) processes_by_pid: HashMap<Pid, ProcessInfo>,
     pub(crate) sockets_by_pid: HashMap<Pid, Vec<ListeningSocket>>,
+    pub(crate) listener_error: Option<String>,
 }
 
 impl SystemSnapshot {
@@ -22,17 +23,13 @@ impl SystemSnapshot {
             .map(|proc| (proc.pid, proc))
             .collect();
 
-        let listeners = get_listening_sockets().unwrap_or_default();
-        let mut sockets_by_pid: HashMap<Pid, Vec<ListeningSocket>> = HashMap::new();
-
-        for socket in listeners {
-            sockets_by_pid.entry(socket.pid).or_default().push(socket);
-        }
+        let (sockets_by_pid, listener_error) = get_sockets_by_pid();
 
         SystemSnapshot {
             runtimes,
             processes_by_pid,
             sockets_by_pid,
+            listener_error,
         }
     }
 
@@ -42,15 +39,25 @@ impl SystemSnapshot {
             .map(|proc| (proc.pid, proc))
             .collect();
 
-        let mut sockets_by_pid: HashMap<Pid, Vec<ListeningSocket>> = HashMap::new();
-
-        let listeners = get_listening_sockets().unwrap_or_default();
-        for socket in listeners {
-            sockets_by_pid.entry(socket.pid).or_default().push(socket);
-        }
-
+        let (sockets_by_pid, listener_error) = get_sockets_by_pid();
         self.sockets_by_pid = sockets_by_pid;
+        self.listener_error = listener_error;
 
         self.runtimes = get_runtimes();
+    }
+}
+
+fn get_sockets_by_pid() -> (HashMap<Pid, Vec<ListeningSocket>>, Option<String>) {
+    match get_listening_sockets() {
+        Ok(listeners) => {
+            let mut sockets_by_pid: HashMap<Pid, Vec<ListeningSocket>> = HashMap::new();
+
+            for socket in listeners {
+                sockets_by_pid.entry(socket.pid).or_default().push(socket);
+            }
+
+            (sockets_by_pid, None)
+        }
+        Err(error) => (HashMap::new(), Some(error)),
     }
 }

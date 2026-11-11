@@ -225,19 +225,22 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
                 .map(|path| path.display().to_string())
                 .unwrap_or_else(|| "Unavailable".to_string());
 
-            let listeners = app
-                .snapshot
-                .sockets_by_pid
-                .get(&process.pid)
-                .map(|sockets| {
-                    sockets
-                        .iter()
-                        .map(|socket| socket.socket.to_string())
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                })
-                .filter(|text| !text.is_empty())
-                .unwrap_or_else(|| "None reported".to_string());
+            let listeners = match &app.snapshot.listener_error {
+                Some(error) => format!("Listener discovery failed: {error}"),
+                None => app
+                    .snapshot
+                    .sockets_by_pid
+                    .get(&process.pid)
+                    .map(|sockets| {
+                        sockets
+                            .iter()
+                            .map(|socket| socket.socket.to_string())
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    })
+                    .filter(|text| !text.is_empty())
+                    .unwrap_or_else(|| "None reported".to_string()),
+            };
 
             detail_sections([
                 ("PROCESS ID", process.pid.to_string()),
@@ -353,6 +356,17 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
                 ProcessFilter::All => "all processes",
                 ProcessFilter::Listening => "reported TCP listeners",
             };
+            let listener_failure = app
+                .snapshot
+                .listener_error
+                .as_ref()
+                .filter(|_| app.process_filter == ProcessFilter::Listening)
+                .map(|error| {
+                    Line::styled(
+                        format!("Listener discovery failed: {error}"),
+                        Style::new().fg(PINK),
+                    )
+                });
             Text::from(vec![
                 Line::styled(
                     format!(
@@ -364,7 +378,9 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
                     Style::new().fg(CYAN),
                 ),
                 query_status(&app.process_query),
-                Line::from("Snapshot data · r: refresh · [: previous filter · ]: next filter"),
+                listener_failure.unwrap_or_else(|| {
+                    Line::from("Snapshot data · r: refresh · [: previous filter · ]: next filter")
+                }),
             ])
         }
         Focus::Runtimes => Text::from(vec![
@@ -542,6 +558,10 @@ fn status_details(snapshot: &SystemSnapshot, width: u16) -> Text<'static> {
     ]);
 
     let listener_count: usize = snapshot.sockets_by_pid.values().map(Vec::len).sum();
+    let listener_summary = match &snapshot.listener_error {
+        Some(error) => format!("listener discovery failed: {error}"),
+        None => format!("{listener_count} TCP listeners"),
+    };
     let tools_found = snapshot
         .runtimes
         .iter()
@@ -562,9 +582,8 @@ fn status_details(snapshot: &SystemSnapshot, width: u16) -> Text<'static> {
         (
             "Snapshot  ",
             format!(
-                "{} processes · {} TCP listeners",
+                "{} processes · {listener_summary}",
                 snapshot.processes_by_pid.len(),
-                listener_count
             ),
         ),
         (
@@ -761,6 +780,7 @@ mod tests {
             runtimes: Vec::new(),
             processes_by_pid: Default::default(),
             sockets_by_pid: Default::default(),
+            listener_error: None,
         };
         let full = status_details(&snapshot, 100).to_string();
         assert!(full.contains(LOGO));
@@ -768,5 +788,18 @@ mod tests {
         assert!(compact.contains("[ DevDoctor ]"));
         assert!(!compact.contains(LOGO));
         assert!(compact.contains(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn status_reports_listener_discovery_failures_instead_of_zero_listeners() {
+        let snapshot = SystemSnapshot {
+            runtimes: Vec::new(),
+            processes_by_pid: Default::default(),
+            sockets_by_pid: Default::default(),
+            listener_error: Some("permission denied".to_string()),
+        };
+        let status = status_details(&snapshot, 100).to_string();
+        assert!(status.contains("listener discovery failed: permission denied"));
+        assert!(!status.contains("0 TCP listeners"));
     }
 }

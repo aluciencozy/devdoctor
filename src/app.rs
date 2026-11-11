@@ -195,6 +195,7 @@ mod tests {
                 runtimes: Vec::new(),
                 processes_by_pid: Default::default(),
                 sockets_by_pid: Default::default(),
+                listener_error: None,
             },
             focus: Focus::Status,
             processes_state: ListState::default().with_selected(Some(0)),
@@ -703,6 +704,41 @@ mod tests {
                 .collect();
             assert!(screen.contains(&format!("{:<7}  node", pid.to_string())));
         }
+    }
+
+    #[test]
+    fn listener_discovery_failure_is_visible_in_process_details_and_listening_filter() {
+        let mut app = app();
+        app.focus = Focus::Processes;
+        app.snapshot.listener_error = Some("permission denied".to_string());
+        let process = crate::process::ProcessInfo {
+            pid: sysinfo::Pid::from_u32(42),
+            command: vec!["node".into()],
+            cwd: None,
+        };
+        app.snapshot.processes_by_pid.insert(process.pid, process);
+
+        let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+        terminal
+            .draw(|frame| crate::ui::draw(frame, &mut app))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let screen: String = (0..40)
+            .flat_map(|y| (0..140).map(move |x| buffer[(x, y)].symbol()))
+            .collect();
+        assert!(screen.contains("Listener discovery failed: permission denied"));
+        assert!(!screen.contains("None reported"));
+
+        app.handle_key(KeyCode::Char('f'));
+        terminal
+            .draw(|frame| crate::ui::draw(frame, &mut app))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let screen: String = (0..40)
+            .flat_map(|y| (0..140).map(move |x| buffer[(x, y)].symbol()))
+            .collect();
+        assert!(screen.contains("0 shown"));
+        assert!(screen.contains("Listener discovery failed: permission denied"));
     }
 
     #[test]
