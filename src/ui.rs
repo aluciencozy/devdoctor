@@ -68,7 +68,15 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         .block(panel(Line::from("Agents"), false));
 
     // runtime info
-    let runtime_items = app.snapshot.runtimes.iter().map(|runtime| {
+    let runtime_query = app.runtime_query.to_lowercase();
+    let runtimes: Vec<_> = app
+        .snapshot
+        .runtimes
+        .iter()
+        .filter(|runtime| runtime.name.to_lowercase().contains(&runtime_query))
+        .collect();
+
+    let runtime_items = runtimes.iter().map(|runtime| {
         let summary = match &runtime.candidates {
             Ok(candidates) if candidates.is_empty() => "Not found".to_string(),
             Ok(candidates) => format!("{} on PATH", candidates.len()),
@@ -85,8 +93,7 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     let runtimes_panel = List::new(runtime_items)
         .block(
             panel(Line::from("[3] Runtimes"), runtimes_focused).title_bottom(
-                position(app.runtimes_state.selected(), app.snapshot.runtimes.len())
-                    .right_aligned(),
+                position(app.runtimes_state.selected(), runtimes.len()).right_aligned(),
             ),
         )
         .highlight_style(selection_style(runtimes_focused))
@@ -219,7 +226,7 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     let selected_runtime = app
         .runtimes_state
         .selected()
-        .and_then(|index| app.snapshot.runtimes.get(index));
+        .and_then(|index| runtimes.get(index));
 
     let runtime_details = match selected_runtime {
         Some(runtime) => {

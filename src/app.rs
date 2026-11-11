@@ -323,6 +323,104 @@ mod tests {
     }
 
     #[test]
+    fn runtime_search_matches_names_and_all_candidate_paths() {
+        use crate::runtime::{ExecutableCandidate, Runtime, VersionError};
+
+        let mut app = app();
+        app.focus = Focus::Runtimes;
+        app.snapshot.runtimes = vec![
+            Runtime {
+                name: "python".to_string(),
+                candidates: Ok(vec![ExecutableCandidate {
+                    path: "/tools/python".into(),
+                    version: Err(VersionError::EmptyOutput),
+                }]),
+            },
+            Runtime {
+                name: "node".to_string(),
+                candidates: Ok(vec![
+                    ExecutableCandidate {
+                        path: "/tools/node".into(),
+                        version: Ok("v24.0.0".to_string()),
+                    },
+                    ExecutableCandidate {
+                        path: "/Alternate/Node".into(),
+                        version: Err(VersionError::EmptyOutput),
+                    },
+                ]),
+            },
+            Runtime {
+                name: "rustc".to_string(),
+                candidates: Err(which::Error::CannotFindBinaryPath),
+            },
+            Runtime {
+                name: "cargo".to_string(),
+                candidates: Ok(Vec::new()),
+            },
+        ];
+
+        for (query, expected_row, expected_detail, count) in [
+            ("", "python  1 on PATH", "/tools/python", 4),
+            ("NoDe", "node  2 on PATH", "/tools/node", 1),
+            ("ALTERNATE", "node  2 on PATH", "/Alternate/Node", 1),
+            ("PYTHON", "python  1 on PATH", "Version check failed:", 1),
+            (
+                "RUST",
+                "rustc  Lookup failed",
+                "Executable lookup failed:",
+                1,
+            ),
+            (
+                "CARGO",
+                "cargo  Not found",
+                "No executable found on PATH",
+                1,
+            ),
+        ] {
+            app.runtime_query = query.to_string();
+            app.runtimes_state.select_first();
+            let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+            terminal
+                .draw(|frame| crate::ui::draw(frame, &mut app))
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let screen: String = (0..40)
+                .flat_map(|y| (0..140).map(move |x| buffer[(x, y)].symbol()))
+                .collect();
+            assert!(
+                screen.contains(expected_row),
+                "Missing matching row for {query}"
+            );
+            assert!(
+                screen.contains(expected_detail),
+                "Wrong details for {query}"
+            );
+            assert!(screen.contains(&format!("1 of {count}")));
+            if count == 1 {
+                for name in ["python", "node", "rustc", "cargo"] {
+                    if !expected_row.starts_with(name) {
+                        assert!(!screen.contains(&format!("{name}  ")));
+                    }
+                }
+            }
+        }
+
+        app.runtime_query = "no-such-runtime".to_string();
+        app.runtimes_state.select_first();
+        let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+        terminal
+            .draw(|frame| crate::ui::draw(frame, &mut app))
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let screen: String = (0..40)
+            .flat_map(|y| (0..140).map(move |x| buffer[(x, y)].symbol()))
+            .collect();
+        assert!(screen.contains("0 of 0"));
+        assert!(screen.contains("No runtime selected"));
+        assert_eq!(app.runtimes_state.selected(), None);
+    }
+
+    #[test]
     fn numbers_jump_directly_without_resetting_selections() {
         let mut app = app();
         app.processes_state.select(Some(5));
