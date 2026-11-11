@@ -313,12 +313,38 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         Focus::Processes => "Process details",
         Focus::Runtimes => "Runtime details",
     };
-    let body_panel = Paragraph::new(details)
-        .block(panel(Line::from(details_title), false).padding(Padding::horizontal(1)))
-        .wrap(Wrap { trim: false });
+
+    let details_block = panel(Line::from(details_title), false).padding(Padding::horizontal(1));
+    let details_area = details_block.inner(body);
+    let body_panel = Paragraph::new(details).wrap(Wrap { trim: false });
+
+    let max_scroll = if details_area.is_empty() {
+        0
+    } else {
+        body_panel
+            .line_count(details_area.width)
+            .saturating_sub(usize::from(details_area.height))
+    };
+    let max_scroll = u16::try_from(max_scroll).unwrap_or(u16::MAX);
+
+    app.details_scroll = app.details_scroll.min(max_scroll);
+    let scroll_hint = if max_scroll > 0 {
+        format!(
+            " J/K: scroll · {}/{} ",
+            app.details_scroll + 1,
+            u32::from(max_scroll) + 1
+        )
+    } else {
+        " J/K: scroll ".to_string()
+    };
 
     frame.render_widget(agents_panel, agents_area);
-    frame.render_widget(body_panel, body);
+    frame.render_widget(
+        details_block
+            .title_bottom(Line::styled(scroll_hint, Style::new().fg(MUTED)).right_aligned()),
+        body,
+    );
+    frame.render_widget(body_panel.scroll((app.details_scroll, 0)), details_area);
 
     let context = match app.focus {
         Focus::Status => Text::from(vec![

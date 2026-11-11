@@ -14,6 +14,7 @@ pub(crate) struct App {
     pub(crate) process_query: String,
     pub(crate) runtime_query: String,
     pub(crate) is_querying: bool,
+    pub(crate) details_scroll: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,6 +70,7 @@ impl App {
             process_query: String::new(),
             runtime_query: String::new(),
             is_querying: false,
+            details_scroll: 0,
         })
     }
 
@@ -91,6 +93,7 @@ impl App {
 
     // Returns true only when the user requests to quit.
     fn handle_key(&mut self, code: KeyCode) -> bool {
+        let previous_focus = self.focus;
         if self.is_querying {
             let (query, state) = match self.focus {
                 Focus::Processes => (&mut self.process_query, &mut self.processes_state),
@@ -104,10 +107,12 @@ impl App {
                 KeyCode::Char(c) => {
                     query.push(c);
                     state.select_first();
+                    self.details_scroll = 0;
                 }
                 KeyCode::Backspace => {
                     if query.pop().is_some() {
                         state.select_first();
+                        self.details_scroll = 0;
                     }
                 }
                 KeyCode::Enter => self.is_querying = false,
@@ -115,6 +120,7 @@ impl App {
                     query.clear();
                     state.select_first();
                     self.is_querying = false;
+                    self.details_scroll = 0;
                 }
                 _ => {}
             }
@@ -122,6 +128,8 @@ impl App {
             match code {
                 KeyCode::Char('/') if self.focus != Focus::Status => self.is_querying = true,
                 KeyCode::Char('q') => return true,
+                KeyCode::Char('J') => self.details_scroll = self.details_scroll.saturating_add(1),
+                KeyCode::Char('K') => self.details_scroll = self.details_scroll.saturating_sub(1),
                 KeyCode::Char('1') => self.focus = Focus::Status,
                 KeyCode::Char('2') => self.focus = Focus::Processes,
                 KeyCode::Char('3') => self.focus = Focus::Runtimes,
@@ -134,11 +142,13 @@ impl App {
                         ProcessFilter::Listening => ProcessFilter::All,
                     };
                     self.processes_state.select_first();
+                    self.details_scroll = 0;
                 }
                 KeyCode::Char('r') => {
                     self.snapshot.refresh(&mut self.sys);
                     self.processes_state.select_first();
                     self.runtimes_state.select_first();
+                    self.details_scroll = 0;
                 }
                 _ => {
                     // Status has no list: item navigation must not affect hidden selections.
@@ -148,6 +158,7 @@ impl App {
                         Focus::Runtimes => Some(&mut self.runtimes_state),
                     };
                     if let Some(state) = active_state {
+                        let previous_selection = state.selected();
                         match code {
                             KeyCode::Char('j') | KeyCode::Down => state.select_next(),
                             KeyCode::Char('k') | KeyCode::Up => state.select_previous(),
@@ -157,9 +168,15 @@ impl App {
                             KeyCode::PageUp => state.scroll_up_by(10),
                             _ => {}
                         }
+                        if state.selected() != previous_selection {
+                            self.details_scroll = 0;
+                        }
                     }
                 }
             }
+        }
+        if self.focus != previous_focus {
+            self.details_scroll = 0;
         }
         false
     }
@@ -186,6 +203,7 @@ mod tests {
             process_query: String::new(),
             runtime_query: String::new(),
             is_querying: false,
+            details_scroll: 0,
         }
     }
 
@@ -467,6 +485,95 @@ mod tests {
             assert!(screen.contains("/Needle"));
             assert!(screen.contains("/Rust"));
         }
+    }
+
+    #[test]
+    fn details_scroll_is_bounded_and_resets_when_context_changes() {
+        let mut app = app();
+        app.focus = Focus::Processes;
+
+        app.handle_key(KeyCode::Char('J'));
+        app.handle_key(KeyCode::Char('J'));
+        assert_eq!(app.details_scroll, 2);
+        app.handle_key(KeyCode::Char('K'));
+        assert_eq!(app.details_scroll, 1);
+        for _ in 0..3 {
+            app.handle_key(KeyCode::Char('K'));
+        }
+        assert_eq!(app.details_scroll, 0);
+
+        app.details_scroll = 3;
+        app.handle_key(KeyCode::Char('j'));
+        assert_eq!(app.details_scroll, 0);
+
+        app.details_scroll = 3;
+        app.handle_key(KeyCode::Char('f'));
+        assert_eq!(app.details_scroll, 0);
+
+        app.details_scroll = 3;
+        app.handle_key(KeyCode::Char('/'));
+        app.handle_key(KeyCode::Char('J'));
+        assert_eq!(app.process_query, "J");
+        assert_eq!(app.details_scroll, 0);
+        app.handle_key(KeyCode::Enter);
+
+        app.details_scroll = 3;
+        app.handle_key(KeyCode::Char('3'));
+        assert_eq!(app.focus, Focus::Runtimes);
+        assert_eq!(app.details_scroll, 0);
+    }
+
+    #[test]
+    fn details_scrolling_reveals_later_lines_and_clamps_to_content() {
+        let mut app = app();
+        let mut terminal = Terminal::new(TestBackend::new(80, 14)).unwrap();
+        terminal
+            .draw(|frame| crate::ui::draw(frame, &mut app))
+            .unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains(" ____             ____             _"));
+        assert!(screen.contains("J/K: scroll"));
+
+        app.handle_key(KeyCode::Char('J'));
+        app.handle_key(KeyCode::Char('J'));
+        terminal
+            .draw(|frame| crate::ui::draw(frame, &mut app))
+            .unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert_eq!(app.details_scroll, 2);
+        assert!(!screen.contains(" ____             ____             _"));
+        assert!(screen.contains("|  _ \\  _____"));
+
+        app.details_scroll = u16::MAX;
+        terminal
+            .draw(|frame| crate::ui::draw(frame, &mut app))
+            .unwrap();
+        assert!(app.details_scroll > 0);
+        assert!(app.details_scroll < u16::MAX);
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(screen.contains(&format!(
+            "{}/{}",
+            app.details_scroll + 1,
+            app.details_scroll + 1
+        )));
     }
 
     #[test]
