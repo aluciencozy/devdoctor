@@ -95,34 +95,24 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     frame.render_stateful_widget(runtimes_panel, runtimes_area, &mut app.runtimes_state);
 
     // process info
+    let process_query = app.process_query.to_lowercase();
     let mut processes: Vec<_> = app
         .snapshot
         .processes_by_pid
         .values()
         .filter(|process| match app.process_filter {
-            ProcessFilter::All => {
-                process.pid.to_string().contains(&app.process_query) || {
-                    let command = process
-                        .command
-                        .iter()
-                        .map(|os_string| os_string.to_string_lossy())
-                        .collect::<Vec<_>>()
-                        .join(" ");
-                    command.contains(&app.process_query)
-                }
-            }
-            ProcessFilter::Listening => {
-                app.snapshot.sockets_by_pid.contains_key(&process.pid) && {
-                    process.pid.to_string().contains(&app.process_query) || {
-                        let command = process
-                            .command
-                            .iter()
-                            .map(|os_string| os_string.to_string_lossy())
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        command.contains(&app.process_query)
-                    }
-                }
+            ProcessFilter::All => true,
+            ProcessFilter::Listening => app.snapshot.sockets_by_pid.contains_key(&process.pid),
+        })
+        .filter(|process| {
+            process_query.is_empty() || process.pid.to_string().contains(&process_query) || {
+                let command = process
+                    .command
+                    .iter()
+                    .map(|os_string| os_string.to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                command.to_lowercase().contains(&process_query)
             }
         })
         .collect();

@@ -92,28 +92,35 @@ impl App {
     // Returns true only when the user requests to quit.
     fn handle_key(&mut self, code: KeyCode) -> bool {
         if self.is_querying {
-            match self.focus {
-                Focus::Processes => match code {
-                    KeyCode::Char(c) => self.process_query.extend(c.to_lowercase()),
-                    KeyCode::Backspace => {
-                        self.process_query.pop();
+            let (query, state) = match self.focus {
+                Focus::Processes => (&mut self.process_query, &mut self.processes_state),
+                Focus::Runtimes => (&mut self.runtime_query, &mut self.runtimes_state),
+                Focus::Status => {
+                    self.is_querying = false;
+                    return false;
+                }
+            };
+            match code {
+                KeyCode::Char(c) => {
+                    query.push(c);
+                    state.select_first();
+                }
+                KeyCode::Backspace => {
+                    if query.pop().is_some() {
+                        state.select_first();
                     }
-                    KeyCode::Enter | KeyCode::Esc => self.is_querying = false,
-                    _ => {}
-                },
-                Focus::Runtimes => match code {
-                    KeyCode::Char(c) => self.runtime_query.push(c),
-                    KeyCode::Backspace => {
-                        self.runtime_query.pop();
-                    }
-                    KeyCode::Enter | KeyCode::Esc => self.is_querying = false,
-                    _ => {}
-                },
+                }
+                KeyCode::Enter => self.is_querying = false,
+                KeyCode::Esc => {
+                    query.clear();
+                    state.select_first();
+                    self.is_querying = false;
+                }
                 _ => {}
             }
         } else {
             match code {
-                KeyCode::Char('/') => self.is_querying = true,
+                KeyCode::Char('/') if self.focus != Focus::Status => self.is_querying = true,
                 KeyCode::Char('q') => return true,
                 KeyCode::Char('1') => self.focus = Focus::Status,
                 KeyCode::Char('2') => self.focus = Focus::Processes,
@@ -179,6 +186,139 @@ mod tests {
             process_query: String::new(),
             runtime_query: String::new(),
             is_querying: false,
+        }
+    }
+
+    #[test]
+    fn status_cannot_enter_search() {
+        let mut app = app();
+        app.handle_key(KeyCode::Char('/'));
+        assert!(!app.is_querying);
+        assert!(app.handle_key(KeyCode::Char('q')));
+    }
+
+    #[test]
+    fn search_edits_only_the_focused_query_and_selection() {
+        for focus in [Focus::Processes, Focus::Runtimes] {
+            let mut app = app();
+            app.focus = focus;
+            app.processes_state.select(Some(5));
+            app.runtimes_state.select(Some(2));
+            app.handle_key(KeyCode::Char('/'));
+            assert!(app.is_querying);
+
+            for c in "Nqrhl123".chars() {
+                assert!(!app.handle_key(KeyCode::Char(c)));
+            }
+            app.handle_key(KeyCode::Tab);
+            assert_eq!(app.focus, focus);
+            assert!(app.is_querying);
+            assert_eq!(app.process_filter, ProcessFilter::All);
+
+            // Make the Backspace reset observable independently of typing.
+            match focus {
+                Focus::Processes => app.processes_state.select(Some(3)),
+                Focus::Runtimes => app.runtimes_state.select(Some(3)),
+                Focus::Status => unreachable!(),
+            }
+            app.handle_key(KeyCode::Backspace);
+            app.handle_key(KeyCode::Enter);
+            assert!(!app.is_querying);
+
+            match focus {
+                Focus::Processes => {
+                    assert_eq!(app.process_query, "Nqrhl12");
+                    assert!(app.runtime_query.is_empty());
+                    assert_eq!(app.processes_state.selected(), Some(0));
+                    assert_eq!(app.runtimes_state.selected(), Some(2));
+                }
+                Focus::Runtimes => {
+                    assert_eq!(app.runtime_query, "Nqrhl12");
+                    assert!(app.process_query.is_empty());
+                    assert_eq!(app.runtimes_state.selected(), Some(0));
+                    assert_eq!(app.processes_state.selected(), Some(5));
+                }
+                Focus::Status => unreachable!(),
+            }
+        }
+    }
+
+    #[test]
+    fn escape_clears_only_the_focused_search() {
+        for focus in [Focus::Processes, Focus::Runtimes] {
+            let mut app = app();
+            app.focus = focus;
+            app.process_query = "Node".to_string();
+            app.runtime_query = "Rust".to_string();
+            app.processes_state.select(Some(5));
+            app.runtimes_state.select(Some(2));
+            app.handle_key(KeyCode::Char('/'));
+            app.handle_key(KeyCode::Esc);
+            assert!(!app.is_querying);
+
+            match focus {
+                Focus::Processes => {
+                    assert!(app.process_query.is_empty());
+                    assert_eq!(app.runtime_query, "Rust");
+                    assert_eq!(app.processes_state.selected(), Some(0));
+                    assert_eq!(app.runtimes_state.selected(), Some(2));
+                }
+                Focus::Runtimes => {
+                    assert!(app.runtime_query.is_empty());
+                    assert_eq!(app.process_query, "Node");
+                    assert_eq!(app.runtimes_state.selected(), Some(0));
+                    assert_eq!(app.processes_state.selected(), Some(5));
+                }
+                Focus::Status => unreachable!(),
+            }
+        }
+    }
+
+    #[test]
+    fn process_search_matches_case_insensitively_across_arguments_and_by_pid() {
+        let mut app = app();
+        app.focus = Focus::Processes;
+        for (pid, command) in [
+            (42, vec!["Node", "SERVER.js"]),
+            (84, vec!["python", "worker.py"]),
+        ] {
+            let process = crate::process::ProcessInfo {
+                pid: sysinfo::Pid::from_u32(pid),
+                command: command.into_iter().map(Into::into).collect(),
+                cwd: None,
+            };
+            app.snapshot.processes_by_pid.insert(process.pid, process);
+        }
+
+        for (query, expected_row) in [
+            ("NODE server", Some("42       Node")),
+            ("84", Some("84       python")),
+            ("no-such-command", None),
+        ] {
+            app.process_query = query.to_string();
+            app.processes_state.select_first();
+            let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+            terminal
+                .draw(|frame| crate::ui::draw(frame, &mut app))
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let screen: String = (0..40)
+                .flat_map(|y| (0..140).map(move |x| buffer[(x, y)].symbol()))
+                .collect();
+            if let Some(row) = expected_row {
+                assert!(screen.contains(row), "Missing matching row for {query}");
+                assert!(screen.contains("1 of 1"));
+                let other_row = if query == "84" {
+                    "42       Node"
+                } else {
+                    "84       python"
+                };
+                assert!(!screen.contains(other_row));
+            } else {
+                assert!(screen.contains("0 of 0"));
+                assert!(screen.contains("No process selected"));
+                assert_eq!(app.processes_state.selected(), None);
+            }
         }
     }
 
