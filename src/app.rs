@@ -323,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_search_matches_names_and_all_candidate_paths() {
+    fn runtime_search_matches_names_only() {
         use crate::runtime::{ExecutableCandidate, Runtime, VersionError};
 
         let mut app = app();
@@ -362,7 +362,6 @@ mod tests {
         for (query, expected_row, expected_detail, count) in [
             ("", "python  1 on PATH", "/tools/python", 4),
             ("NoDe", "node  2 on PATH", "/tools/node", 1),
-            ("ALTERNATE", "node  2 on PATH", "/Alternate/Node", 1),
             ("PYTHON", "python  1 on PATH", "Version check failed:", 1),
             (
                 "RUST",
@@ -405,19 +404,69 @@ mod tests {
             }
         }
 
-        app.runtime_query = "no-such-runtime".to_string();
-        app.runtimes_state.select_first();
-        let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
-        terminal
-            .draw(|frame| crate::ui::draw(frame, &mut app))
-            .unwrap();
-        let buffer = terminal.backend().buffer();
-        let screen: String = (0..40)
-            .flat_map(|y| (0..140).map(move |x| buffer[(x, y)].symbol()))
-            .collect();
-        assert!(screen.contains("0 of 0"));
-        assert!(screen.contains("No runtime selected"));
-        assert_eq!(app.runtimes_state.selected(), None);
+        // Candidate paths no longer participate in name-only runtime search.
+        for query in ["ALTERNATE", "no-such-runtime"] {
+            app.runtime_query = query.to_string();
+            app.runtimes_state.select_first();
+            let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+            terminal
+                .draw(|frame| crate::ui::draw(frame, &mut app))
+                .unwrap();
+            let buffer = terminal.backend().buffer();
+            let screen: String = (0..40)
+                .flat_map(|y| (0..140).map(move |x| buffer[(x, y)].symbol()))
+                .collect();
+            assert!(screen.contains("0 of 0"));
+            assert!(screen.contains("No runtime selected"));
+            assert_eq!(app.runtimes_state.selected(), None);
+        }
+    }
+
+    #[test]
+    fn search_ui_distinguishes_editing_from_saved_queries() {
+        for (focus, editor_label) in [
+            (Focus::Processes, "Search processes /"),
+            (Focus::Runtimes, "Search runtimes /"),
+        ] {
+            let mut app = app();
+            app.focus = focus;
+            app.process_query = "Needle".to_string();
+            app.runtime_query = "Rust".to_string();
+            app.handle_key(KeyCode::Char('/'));
+            let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+            terminal
+                .draw(|frame| crate::ui::draw(frame, &mut app))
+                .unwrap();
+            let screen: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(screen.contains(editor_label));
+            assert!(screen.contains("Type to filter"));
+            assert!(screen.contains("Enter: Keep"));
+            assert!(screen.contains("Esc: Clear"));
+            assert!(!screen.contains("Quit: q"));
+
+            app.handle_key(KeyCode::Enter);
+            terminal
+                .draw(|frame| crate::ui::draw(frame, &mut app))
+                .unwrap();
+            let screen: String = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect();
+            assert!(!screen.contains("Type to filter"));
+            assert!(screen.contains("Quit: q"));
+            assert!(screen.contains("Search: /"));
+            assert!(screen.contains("/Needle"));
+            assert!(screen.contains("/Rust"));
+        }
     }
 
     #[test]
@@ -582,12 +631,15 @@ mod tests {
     fn all_views_render_on_small_terminals() {
         for (width, height) in [(1, 1), (20, 8), (80, 24)] {
             for focus in [Focus::Status, Focus::Processes, Focus::Runtimes] {
-                let mut app = app();
-                app.focus = focus;
-                let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-                terminal
-                    .draw(|frame| crate::ui::draw(frame, &mut app))
-                    .unwrap();
+                for editing in [false, true] {
+                    let mut app = app();
+                    app.focus = focus;
+                    app.is_querying = editing;
+                    let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+                    terminal
+                        .draw(|frame| crate::ui::draw(frame, &mut app))
+                        .unwrap();
+                }
             }
         }
     }

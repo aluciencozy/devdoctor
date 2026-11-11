@@ -31,8 +31,13 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         frame.area(),
     );
 
-    let [main_area, footer_area] =
-        Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(frame.area());
+    let editing_search = app.is_querying && app.focus != Focus::Status;
+    let [main_area, search_area, footer_area] = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Length(u16::from(editing_search)),
+        Constraint::Length(1),
+    ])
+    .areas(frame.area());
 
     let [sidebar, right] = Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)])
         .spacing(1)
@@ -90,16 +95,28 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         ]))
     });
 
+    let runtime_position = position(app.runtimes_state.selected(), runtimes.len());
+    let runtime_search = search_title(
+        &app.runtime_query,
+        editing_search && runtimes_focused,
+        usize::from(runtimes_area.width.saturating_sub(3)).saturating_sub(runtime_position.width()),
+    );
     let runtimes_panel = List::new(runtime_items)
         .block(
-            panel(Line::from("[3] Runtimes"), runtimes_focused).title_bottom(
-                position(app.runtimes_state.selected(), runtimes.len()).right_aligned(),
-            ),
+            panel(Line::from("[3] Runtimes"), runtimes_focused)
+                .title_bottom(runtime_search)
+                .title_bottom(runtime_position.right_aligned()),
         )
         .highlight_style(selection_style(runtimes_focused))
         .highlight_symbol(" ");
 
     frame.render_stateful_widget(runtimes_panel, runtimes_area, &mut app.runtimes_state);
+    if runtimes.is_empty() {
+        frame.render_widget(
+            Paragraph::new("No matching runtimes").style(Style::new().fg(MUTED)),
+            Block::bordered().inner(runtimes_area),
+        );
+    }
 
     // process info
     let process_query = app.process_query.to_lowercase();
@@ -169,14 +186,29 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         Line::from("[2] Processes")
     };
 
+    let process_position = position(app.processes_state.selected(), processes.len());
+    let process_search = search_title(
+        &app.process_query,
+        editing_search && processes_focused,
+        usize::from(processes_area.width.saturating_sub(3))
+            .saturating_sub(process_position.width()),
+    );
     let processes_panel = List::new(process_items)
-        .block(panel(processes_title, processes_focused).title_bottom(
-            position(app.processes_state.selected(), processes.len()).right_aligned(),
-        ))
+        .block(
+            panel(processes_title, processes_focused)
+                .title_bottom(process_search)
+                .title_bottom(process_position.right_aligned()),
+        )
         .highlight_style(selection_style(processes_focused))
         .highlight_symbol(" ");
 
     frame.render_stateful_widget(processes_panel, processes_area, &mut app.processes_state);
+    if processes.is_empty() {
+        frame.render_widget(
+            Paragraph::new("No matching processes").style(Style::new().fg(MUTED)),
+            Block::bordered().inner(processes_area),
+        );
+    }
 
     // main block details info
     let selected_process = app
@@ -312,13 +344,20 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
                     ),
                     Style::new().fg(CYAN),
                 ),
-                Line::from(""),
+                query_status(&app.process_query),
                 Line::from("Snapshot data · r: refresh · [: previous filter · ]: next filter"),
             ])
         }
         Focus::Runtimes => Text::from(vec![
-            Line::styled("Tools discovered on your PATH", Style::new().fg(CYAN)),
-            Line::from(""),
+            Line::styled(
+                format!(
+                    "{} shown · {} configured tools",
+                    runtimes.len(),
+                    app.snapshot.runtimes.len()
+                ),
+                Style::new().fg(CYAN),
+            ),
+            query_status(&app.runtime_query),
             Line::from("Snapshot data · press r to check paths and versions again"),
         ]),
     };
@@ -328,7 +367,99 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
             .wrap(Wrap { trim: false }),
         context_area,
     );
-    draw_footer(frame, footer_area, app.focus);
+    if editing_search {
+        let query = match app.focus {
+            Focus::Processes => &app.process_query,
+            Focus::Runtimes => &app.runtime_query,
+            Focus::Status => unreachable!(),
+        };
+        draw_search_editor(frame, search_area, footer_area, app.focus, query);
+    } else {
+        draw_footer(frame, footer_area, app.focus);
+    }
+}
+
+fn search_title(query: &str, editing: bool, width: usize) -> Line<'static> {
+    if (query.is_empty() && !editing) || width < 4 {
+        return Line::default();
+    }
+
+    let label = format!(" /{query} ");
+    let label = if Line::from(label.as_str()).width() <= width {
+        label
+    } else {
+        // Measure terminal columns, not UTF-8 bytes, and leave room for the counter.
+        let mut shortened = String::from(" /");
+        for c in query.chars() {
+            if Line::from(format!("{shortened}{c}… ")).width() > width {
+                break;
+            }
+            shortened.push(c);
+        }
+        shortened.push_str("… ");
+        shortened
+    };
+
+    Line::styled(label, Style::new().fg(if editing { PINK } else { CYAN }))
+}
+
+fn query_status(query: &str) -> Line<'_> {
+    if query.is_empty() {
+        Line::styled("Search: none · / to search", Style::new().fg(MUTED))
+    } else {
+        Line::from(vec![
+            Span::styled("Search: /", Style::new().fg(MUTED)),
+            Span::styled(query, Style::new().fg(TEXT)),
+        ])
+    }
+}
+
+fn draw_search_editor(frame: &mut Frame, area: Rect, footer: Rect, focus: Focus, query: &str) {
+    frame.render_widget(
+        Line::from(vec![
+            Span::styled("Type to filter", Style::new().fg(PINK).bold()),
+            Span::styled(
+                " │ Enter: Keep │ Esc: Clear │ Backspace: Delete",
+                Style::new().fg(BLUE),
+            ),
+        ]),
+        footer,
+    );
+    if area.is_empty() {
+        return;
+    }
+
+    frame.render_widget(Block::default().style(Style::new().bg(SELECTION)), area);
+    let label = match focus {
+        Focus::Processes => "Search processes / ",
+        Focus::Runtimes => "Search runtimes / ",
+        Focus::Status => return,
+    };
+    // Keep at least one cell for input, even on a very narrow terminal.
+    let label_width = u16::try_from(label.len())
+        .unwrap_or(u16::MAX)
+        .min(area.width.saturating_sub(1));
+    let [label_area, input_area] =
+        Layout::horizontal([Constraint::Length(label_width), Constraint::Fill(1)]).areas(area);
+    frame.render_widget(
+        Line::styled(label, Style::new().fg(PINK).bold()),
+        label_area,
+    );
+
+    let query_width = Line::from(query).width();
+    let scroll =
+        u16::try_from(query_width.saturating_sub(usize::from(input_area.width.saturating_sub(1))))
+            .unwrap_or(u16::MAX);
+    frame.render_widget(
+        Paragraph::new(query)
+            .style(Style::new().fg(TEXT))
+            .scroll((0, scroll)),
+        input_area,
+    );
+    let cursor_column = query_width
+        .saturating_sub(usize::from(scroll))
+        .min(usize::from(input_area.width.saturating_sub(1)));
+    frame.set_cursor_position((input_area.x + cursor_column as u16, input_area.y));
 }
 
 fn panel(title: Line<'_>, focused: bool) -> Block<'_> {
@@ -447,14 +578,13 @@ fn draw_footer(frame: &mut Frame, area: Rect, focus: Focus) {
             .spacing(u16::from(brand_width > 0))
             .areas(area);
 
-    let mut hints = vec![Span::styled(
-        "Sections: 1/2/3 h/l Tab",
-        Style::new().fg(BLUE),
-    )];
+    let mut hints = vec![Span::styled("1/2/3 h/l Tab", Style::new().fg(BLUE))];
     if focus != Focus::Status {
         hints.extend([
             Span::styled(" │ ", Style::new().fg(MUTED)),
             Span::styled("Move: j/k", Style::new().fg(BLUE)),
+            Span::styled(" │ ", Style::new().fg(MUTED)),
+            Span::styled("Search: /", Style::new().fg(BLUE)),
         ]);
     }
     if focus == Focus::Processes {
@@ -480,7 +610,56 @@ fn draw_footer(frame: &mut Frame, area: Rect, focus: Focus) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ratatui::{Terminal, backend::TestBackend, widgets::ListState};
+    use ratatui::{
+        Terminal,
+        backend::{Backend, TestBackend},
+        widgets::ListState,
+    };
+
+    #[test]
+    fn search_titles_fit_the_available_space_and_preserve_casing() {
+        for query in [
+            "Node",
+            "工具Python",
+            "a very long query that must be shortened",
+        ] {
+            for width in [0, 4, 12, 40] {
+                let title = search_title(query, false, width);
+                assert!(title.width() <= width);
+            }
+        }
+        assert_eq!(search_title("Node", false, 40).to_string(), " /Node ");
+        assert!(search_title("", false, 40).to_string().is_empty());
+        assert_eq!(search_title("", true, 40).to_string(), " / ");
+        assert!(
+            search_title("long query", false, 8)
+                .to_string()
+                .contains('…')
+        );
+    }
+
+    #[test]
+    fn search_editor_keeps_its_cursor_visible_for_long_and_unicode_queries() {
+        for query in [String::new(), "Node工具".to_string(), "x".repeat(120)] {
+            for width in [1, 20, 80] {
+                let mut terminal = Terminal::new(TestBackend::new(width, 2)).unwrap();
+                terminal
+                    .draw(|frame| {
+                        draw_search_editor(
+                            frame,
+                            Rect::new(0, 0, width, 1),
+                            Rect::new(0, 1, width, 1),
+                            Focus::Processes,
+                            &query,
+                        );
+                    })
+                    .unwrap();
+                let cursor = terminal.backend_mut().get_cursor_position().unwrap();
+                assert!(cursor.x < width);
+                assert_eq!(cursor.y, 0);
+            }
+        }
+    }
 
     #[test]
     fn rounded_border_tracks_focus() {
@@ -548,6 +727,7 @@ mod tests {
                     let content: String = (0..width).map(|x| buffer[(x, 0)].symbol()).collect();
                     assert_eq!(content.contains("Filter: [ ]"), focus == Focus::Processes);
                     assert_eq!(content.contains("Move: j/k"), focus != Focus::Status);
+                    assert_eq!(content.contains("Search: /"), focus != Focus::Status);
                     assert!(content.contains("1/2/3 h/l Tab"));
                     assert!(content.contains("Quit: q"));
                     assert_eq!(content.contains("DevDoctor"), width >= 100);
