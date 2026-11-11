@@ -1,5 +1,7 @@
 # DevDoctor
 
+[![Crates.io](https://img.shields.io/crates/v/devdoctor.svg)](https://crates.io/crates/devdoctor)
+
 A terminal checkup for your development environment. DevDoctor is a small,
 read-only TUI for finding the processes, TCP listeners, and toolchains that are
 running or installed on your machine.
@@ -19,7 +21,7 @@ Processes and runtimes can be searched independently. Search is case-insensitive
 processes match against the PID or full command, while runtimes match against the
 tool name. Counts and details always reflect the currently visible list.
 
-## Install
+## Installation
 
 DevDoctor requires a recent stable Rust toolchain.
 
