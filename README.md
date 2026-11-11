@@ -57,7 +57,6 @@ devdoctor
 DevDoctor is read-only by design:
 
 - It never terminates processes.
-- Agent detection is planned.
 - Version checks run `--version` for each discovered tool. They have a timeout,
   but they still execute local programs and can be slowed down by broken shims.
 

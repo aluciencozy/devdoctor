@@ -43,11 +43,10 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         .spacing(1)
         .areas(main_area);
 
-    let [status_area, processes_area, runtimes_area, agents_area] = Layout::vertical([
+    let [status_area, processes_area, runtimes_area] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Fill(2),
         Constraint::Fill(1),
-        Constraint::Length(3),
     ])
     .spacing(1)
     .areas(sidebar);
@@ -66,11 +65,6 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
     ]))
     .block(panel(Line::from("[1] Status"), app.focus == Focus::Status));
     frame.render_widget(status, status_area);
-
-    // agents info (not completed)
-    let agents_panel = Paragraph::new("Not implemented yet")
-        .style(Style::new().fg(MUTED))
-        .block(panel(Line::from("Agents"), false));
 
     // runtime info
     let runtime_query = app.runtime_query.to_lowercase();
@@ -338,7 +332,6 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         " J/K: scroll ".to_string()
     };
 
-    frame.render_widget(agents_panel, agents_area);
     frame.render_widget(
         details_block
             .title_bottom(Line::styled(scroll_hint, Style::new().fg(MUTED)).right_aligned()),
