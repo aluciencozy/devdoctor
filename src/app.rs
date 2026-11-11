@@ -11,6 +11,9 @@ pub(crate) struct App {
     pub(crate) processes_state: ListState,
     pub(crate) runtimes_state: ListState,
     pub(crate) process_filter: ProcessFilter,
+    pub(crate) process_query: String,
+    pub(crate) runtime_query: String,
+    pub(crate) is_querying: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,6 +66,9 @@ impl App {
             processes_state,
             runtimes_state,
             process_filter: ProcessFilter::All,
+            process_query: String::new(),
+            runtime_query: String::new(),
+            is_querying: false,
         })
     }
 
@@ -85,42 +91,65 @@ impl App {
 
     // Returns true only when the user requests to quit.
     fn handle_key(&mut self, code: KeyCode) -> bool {
-        match code {
-            KeyCode::Char('q') => return true,
-            KeyCode::Char('1') => self.focus = Focus::Status,
-            KeyCode::Char('2') => self.focus = Focus::Processes,
-            KeyCode::Char('3') => self.focus = Focus::Runtimes,
-            KeyCode::Char('h') => self.focus = self.focus.previous(),
-            KeyCode::Char('l') | KeyCode::Tab => self.focus = self.focus.next(),
-            // With two filters, stepping left or right both selects the other one.
-            KeyCode::Char('f' | '[' | ']') if self.focus == Focus::Processes => {
-                self.process_filter = match self.process_filter {
-                    ProcessFilter::All => ProcessFilter::Listening,
-                    ProcessFilter::Listening => ProcessFilter::All,
-                };
-                self.processes_state.select_first();
+        if self.is_querying {
+            match self.focus {
+                Focus::Processes => match code {
+                    KeyCode::Char(c) => self.process_query.extend(c.to_lowercase()),
+                    KeyCode::Backspace => {
+                        self.process_query.pop();
+                    }
+                    KeyCode::Enter | KeyCode::Esc => self.is_querying = false,
+                    _ => {}
+                },
+                Focus::Runtimes => match code {
+                    KeyCode::Char(c) => self.runtime_query.push(c),
+                    KeyCode::Backspace => {
+                        self.runtime_query.pop();
+                    }
+                    KeyCode::Enter | KeyCode::Esc => self.is_querying = false,
+                    _ => {}
+                },
+                _ => {}
             }
-            KeyCode::Char('r') => {
-                self.snapshot.refresh(&mut self.sys);
-                self.processes_state.select_first();
-                self.runtimes_state.select_first();
-            }
-            _ => {
-                // Status has no list: item navigation must not affect hidden selections.
-                let active_state = match self.focus {
-                    Focus::Status => None,
-                    Focus::Processes => Some(&mut self.processes_state),
-                    Focus::Runtimes => Some(&mut self.runtimes_state),
-                };
-                if let Some(state) = active_state {
-                    match code {
-                        KeyCode::Char('j') | KeyCode::Down => state.select_next(),
-                        KeyCode::Char('k') | KeyCode::Up => state.select_previous(),
-                        KeyCode::Char('g') | KeyCode::Home => state.select_first(),
-                        KeyCode::Char('G') | KeyCode::End => state.select_last(),
-                        KeyCode::PageDown => state.scroll_down_by(10),
-                        KeyCode::PageUp => state.scroll_up_by(10),
-                        _ => {}
+        } else {
+            match code {
+                KeyCode::Char('/') => self.is_querying = true,
+                KeyCode::Char('q') => return true,
+                KeyCode::Char('1') => self.focus = Focus::Status,
+                KeyCode::Char('2') => self.focus = Focus::Processes,
+                KeyCode::Char('3') => self.focus = Focus::Runtimes,
+                KeyCode::Char('h') => self.focus = self.focus.previous(),
+                KeyCode::Char('l') | KeyCode::Tab => self.focus = self.focus.next(),
+                // With two filters, stepping left or right both selects the other one.
+                KeyCode::Char('f' | '[' | ']') if self.focus == Focus::Processes => {
+                    self.process_filter = match self.process_filter {
+                        ProcessFilter::All => ProcessFilter::Listening,
+                        ProcessFilter::Listening => ProcessFilter::All,
+                    };
+                    self.processes_state.select_first();
+                }
+                KeyCode::Char('r') => {
+                    self.snapshot.refresh(&mut self.sys);
+                    self.processes_state.select_first();
+                    self.runtimes_state.select_first();
+                }
+                _ => {
+                    // Status has no list: item navigation must not affect hidden selections.
+                    let active_state = match self.focus {
+                        Focus::Status => None,
+                        Focus::Processes => Some(&mut self.processes_state),
+                        Focus::Runtimes => Some(&mut self.runtimes_state),
+                    };
+                    if let Some(state) = active_state {
+                        match code {
+                            KeyCode::Char('j') | KeyCode::Down => state.select_next(),
+                            KeyCode::Char('k') | KeyCode::Up => state.select_previous(),
+                            KeyCode::Char('g') | KeyCode::Home => state.select_first(),
+                            KeyCode::Char('G') | KeyCode::End => state.select_last(),
+                            KeyCode::PageDown => state.scroll_down_by(10),
+                            KeyCode::PageUp => state.scroll_up_by(10),
+                            _ => {}
+                        }
                     }
                 }
             }
@@ -147,6 +176,9 @@ mod tests {
             processes_state: ListState::default().with_selected(Some(0)),
             runtimes_state: ListState::default().with_selected(Some(0)),
             process_filter: ProcessFilter::All,
+            process_query: String::new(),
+            runtime_query: String::new(),
+            is_querying: false,
         }
     }
 

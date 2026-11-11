@@ -100,8 +100,30 @@ pub(crate) fn draw(frame: &mut Frame, app: &mut App) {
         .processes_by_pid
         .values()
         .filter(|process| match app.process_filter {
-            ProcessFilter::All => true,
-            ProcessFilter::Listening => app.snapshot.sockets_by_pid.contains_key(&process.pid),
+            ProcessFilter::All => {
+                process.pid.to_string().contains(&app.process_query) || {
+                    let command = process
+                        .command
+                        .iter()
+                        .map(|os_string| os_string.to_string_lossy())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    command.contains(&app.process_query)
+                }
+            }
+            ProcessFilter::Listening => {
+                app.snapshot.sockets_by_pid.contains_key(&process.pid) && {
+                    process.pid.to_string().contains(&app.process_query) || {
+                        let command = process
+                            .command
+                            .iter()
+                            .map(|os_string| os_string.to_string_lossy())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        command.contains(&app.process_query)
+                    }
+                }
+            }
         })
         .collect();
     processes.sort_unstable_by_key(|process| process.pid.as_u32());
