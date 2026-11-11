@@ -2,6 +2,12 @@
 name = "devdoctor"
 version = "0.1.0"
 edition = "2024"
+description = "A read-only terminal UI for inspecting developer processes, ports, and toolchains"
+repository = "https://github.com/aluciencozy/devdoctor"
+readme = "README.md"
+license = "MIT"
+keywords = ["cli", "tui", "processes", "ports", "developer-tools"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 color-eyre = "0.6.5"

@@ -4,7 +4,7 @@ A terminal checkup for your development environment. DevDoctor is a small,
 read-only TUI for finding the processes, TCP listeners, and toolchains that are
 running or installed on your machine.
 
-![DevDoctor](docs/screenshots/devdoctor.png)
+![DevDoctor](https://raw.githubusercontent.com/aluciencozy/devdoctor/main/docs/screenshots/devdoctor.png)
 
 ## What it shows
 
